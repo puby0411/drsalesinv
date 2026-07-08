@@ -527,9 +527,6 @@
       <div class="topbar-left"><button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><h2>Inventory</h2></div>
       <div class="topbar-right">
         <input class="search-input" placeholder="Search products…" id="inv-search" oninput="renderInventory()">
-        <button class="btn btn-ghost btn-sm" onclick="exportInventoryCSV()">Export CSV</button>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('inv-import-file').click()">Import CSV</button>
-        <input type="file" id="inv-import-file" accept=".csv" style="display:none" onchange="importInventoryCSV(event)">
         <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
       </div>
     </div>
@@ -1431,7 +1428,6 @@ async function checkout() {
   if (cart.length === 0) return alert('Cart is empty.');
   const method = document.getElementById('payment-method').value;
   const total = cart.reduce((a,c)=>a+c.price*c.qty,0);
-  if (!confirm(`Are you sure you want to checkout?\n\nTotal: ${peso(total)}\nPayment: ${method}`)) return;
   const ref = genRef();
   const ts = Date.now();
   const items = cart.map(c=>({...c}));
@@ -1520,83 +1516,6 @@ function renderInventory() {
   }).join('');
 }
 
-function exportInventoryCSV() {
-  let csv = 'SKU,Name,Category,Cost,Price,Stock,LowStockAlert,Infinite\n';
-  products.forEach(p => {
-    csv += `${p.sku},"${(p.name||'').replace(/"/g,'""')}",${p.category||''},${p.cost||0},${p.price||0},${p.infinite ? '' : (p.stock ?? 0)},${p.infinite ? '' : (p.low ?? 5)},${p.infinite ? 'TRUE' : 'FALSE'}\n`;
-  });
-  downloadCSV(csv, 'inventory_export.csv');
-}
-function parseCSVLine(line) {
-  const out = [];
-  let cur = '', inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (line[i+1] === '"') { cur += '"'; i++; }
-        else inQuotes = false;
-      } else cur += c;
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ',') { out.push(cur); cur = ''; }
-      else cur += c;
-    }
-  }
-  out.push(cur);
-  return out.map(s => s.trim());
-}
-async function importInventoryCSV(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
-  if (lines.length < 2) { alert('CSV file has no data rows.'); event.target.value = ''; return; }
-  const header = parseCSVLine(lines[0]).map(h => h.toLowerCase());
-  const col = name => header.indexOf(name);
-  const idx = {
-    sku: col('sku'), name: col('name'), category: col('category'),
-    cost: col('cost'), price: col('price'), stock: col('stock'),
-    low: col('lowstockalert'), infinite: col('infinite')
-  };
-  if (idx.name === -1 || idx.price === -1) {
-    alert('CSV must include at least Name and Price columns.');
-    event.target.value = ''; return;
-  }
-  let added = 0, updated = 0, skipped = 0;
-  const batch = db.batch();
-  for (let i = 1; i < lines.length; i++) {
-    const row = parseCSVLine(lines[i]);
-    if (!row.some(v => v.length)) continue;
-    const name = idx.name > -1 ? row[idx.name] : '';
-    const price = idx.price > -1 ? parseFloat(row[idx.price]) : NaN;
-    if (!name || isNaN(price)) { skipped++; continue; }
-    let sku = idx.sku > -1 ? row[idx.sku] : '';
-    const existing = sku ? products.find(p => p.sku === sku) : null;
-    if (!sku) sku = genSku();
-    const infiniteRaw = idx.infinite > -1 ? row[idx.infinite].toLowerCase() : '';
-    const infinite = infiniteRaw === 'true' || infiniteRaw === 'yes' || infiniteRaw === '1';
-    const stockRaw = idx.stock > -1 ? row[idx.stock] : '';
-    const data = {
-      sku, name,
-      category: (idx.category > -1 && row[idx.category]) ? row[idx.category] : 'General',
-      cost: (idx.cost > -1 && row[idx.cost] !== '') ? parseFloat(row[idx.cost]) || 0 : 0,
-      price,
-      stock: infinite ? null : (stockRaw !== '' && !isNaN(parseInt(stockRaw)) ? parseInt(stockRaw) : (existing && !existing.infinite ? existing.stock : 0)),
-      low: infinite ? 0 : (idx.low > -1 && row[idx.low] !== '' ? parseInt(row[idx.low]) || 5 : (existing ? existing.low : 5)),
-      infinite,
-    };
-    batch.set(db.collection('products').doc(sku), data);
-    if (existing) updated++; else added++;
-  }
-  try {
-    await batch.commit();
-    alert(`Import complete: ${added} added, ${updated} updated${skipped ? `, ${skipped} skipped (missing name/price)` : ''}.`);
-  } catch (e) {
-    alert('Import failed: ' + e.message);
-  }
-  event.target.value = '';
-}
 function toggleInfiniteStock() {
   const inf = document.getElementById('f-infinite').checked;
   document.getElementById('f-stock').disabled = inf;
@@ -1833,9 +1752,7 @@ function renderReports() {
     <div class="kpi-card green"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="font-size:18px">${peso(sum.revenue)}</div><div class="kpi-sub">${sum.count} transactions</div></div>
     <div class="kpi-card"><div class="kpi-label">Total COGS</div><div class="kpi-value" style="font-size:18px">${peso(sum.cogs)}</div></div>
     <div class="kpi-card green"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div><div class="kpi-sub">${sum.revenue>0?(sum.gross/sum.revenue*100).toFixed(1)+'% margin':'-'}</div></div>
-    <div class="kpi-card warn"><div class="kpi-label">Inventory Value</div><div class="kpi-value" style="font-size:18px">${peso(totalInvVal)}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Cash Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.cash)}</div><div class="kpi-sub">${sum.revenue>0?(sum.cash/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Online Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div><div class="kpi-sub">${sum.revenue>0?(sum.online/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>`;
+    <div class="kpi-card warn"><div class="kpi-label">Inventory Value</div><div class="kpi-value" style="font-size:18px">${peso(totalInvVal)}</div></div>`;
 
   document.getElementById('top-products-tbody').innerHTML = sum.top.map(t => `<tr><td style="font-weight:500">${t.name}</td><td class="mono">${t.qty}</td><td class="mono" style="color:var(--accent2)">${peso(t.rev)}</td></tr>`).join('') || emptyRow(3,'No sales data yet.');
 
@@ -2007,7 +1924,6 @@ function exportSummaryCSV() {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  if (m.id === 'product-modal') return; // don't close product modal on outside click (avoid losing in-progress edits)
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
 });
 
