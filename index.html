@@ -43,12 +43,13 @@
     font-size: 14px;
     display: flex;
     height: 100vh;
+    height: 100dvh; /* real visible viewport on mobile (excludes browser chrome) */
     overflow: hidden;
     transition: background 0.2s, color 0.2s;
   }
 
   /* ── APP SHELL ── */
-  #app-shell { display: none; flex: 1; height: 100vh; min-width: 0; }
+  #app-shell { display: none; flex: 1; height: 100vh; height: 100dvh; min-width: 0; }
   #app-shell.active { display: flex; }
 
   /* ── SIDEBAR ── */
@@ -351,6 +352,17 @@
       max-height: 45vh !important;
     }
     #salesmgmt-cart-items { max-height: 40vh !important; }
+
+    /* Payment method + checkout button: never overflow the screen width */
+    #page-pos .page-body > .table-wrap > div[style*="border-top"] > div[style*="display:flex;gap:8px"],
+    #page-salesmgmt .page-body div[style*="display:flex;gap:8px"] {
+      flex-wrap: wrap;
+    }
+    #page-pos #payment-method, #page-salesmgmt #salesmgmt-payment-method { min-width: 0; }
+    #page-pos .page-body > .table-wrap > div[style*="border-top"] > div[style*="display:flex;gap:8px"] > .btn,
+    #page-salesmgmt .page-body div[style*="display:flex;gap:8px"] > .btn {
+      flex: 1 1 100%;
+    }
 
     /* Tables scroll horizontally instead of overflowing the screen */
     .table-wrap { overflow-x: auto; }
@@ -1094,7 +1106,7 @@ async function attemptLogin() {
 const PAGE_ACCESS = {
   dashboard: ['staff','admin','superadmin'],
   pos:       ['staff','admin','superadmin'],
-  salesmgmt: ['staff','admin','superadmin'],
+  salesmgmt: ['admin','superadmin'],
   sales:     ['staff','admin','superadmin'],
   inventory: ['admin','superadmin'],
   reports:   ['admin','superadmin'],
@@ -1110,6 +1122,7 @@ function enterApp() {
   document.getElementById('current-user-role').textContent = currentUser.role;
   const isSuperadmin = currentUser.role === 'superadmin';
   const isAdminUp = currentUser.role === 'admin' || isSuperadmin;
+  document.getElementById('nav-salesmgmt').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-inventory').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-reports').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-users').style.display = isSuperadmin ? 'flex' : 'none';
