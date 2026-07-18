@@ -43,12 +43,13 @@
     font-size: 14px;
     display: flex;
     height: 100vh;
+    height: 100dvh; /* real visible viewport on mobile (excludes browser chrome) */
     overflow: hidden;
     transition: background 0.2s, color 0.2s;
   }
 
   /* ── APP SHELL ── */
-  #app-shell { display: none; flex: 1; height: 100vh; min-width: 0; }
+  #app-shell { display: none; flex: 1; height: 100vh; height: 100dvh; min-width: 0; }
   #app-shell.active { display: flex; }
 
   /* ── SIDEBAR ── */
@@ -181,7 +182,7 @@
   .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   /* ── TABLE ── */
-  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 14px; flex-shrink: 0; }
   .table-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .table-title { font-size: 13px; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; }
@@ -332,15 +333,36 @@
     /* POS: product grid + cart stack vertically instead of side-by-side */
     #page-pos .page-body {
       grid-template-columns: 1fr !important;
+      grid-template-rows: 55vh auto;
       overflow-y: auto;
-      height: auto !important;
     }
     #pos-products {
       grid-template-columns: repeat(2, 1fr) !important;
-      max-height: none !important;
-      overflow-y: visible !important;
+      max-height: 55vh !important;
+      overflow-y: auto !important;
     }
-    #page-pos .table-wrap { max-height: 60vh; }
+    #page-pos .table-wrap { max-height: none; min-height: 320px; }
+
+    /* Sales Management: same stacking fix as POS */
+    #page-salesmgmt .page-body > div[style*="grid-template-columns:1.3fr 1fr"] {
+      grid-template-columns: 1fr !important;
+    }
+    #salesmgmt-products {
+      grid-template-columns: repeat(2, 1fr) !important;
+      max-height: 45vh !important;
+    }
+    #salesmgmt-cart-items { max-height: 40vh !important; }
+
+    /* Payment method + checkout button: never overflow the screen width */
+    #page-pos .page-body > .table-wrap > div[style*="border-top"] > div[style*="display:flex;gap:8px"],
+    #page-salesmgmt .page-body div[style*="display:flex;gap:8px"] {
+      flex-wrap: wrap;
+    }
+    #page-pos #payment-method, #page-salesmgmt #salesmgmt-payment-method { min-width: 0; }
+    #page-pos .page-body > .table-wrap > div[style*="border-top"] > div[style*="display:flex;gap:8px"] > .btn,
+    #page-salesmgmt .page-body div[style*="display:flex;gap:8px"] > .btn {
+      flex: 1 1 100%;
+    }
 
     /* Tables scroll horizontally instead of overflowing the screen */
     .table-wrap { overflow-x: auto; }
@@ -425,6 +447,10 @@
     <button class="nav-item" id="nav-pos" onclick="showPage('pos',this)">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
       Point of Sale
+    </button>
+    <button class="nav-item" id="nav-salesmgmt" onclick="showPage('salesmgmt',this)">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Sales Management
     </button>
     <button class="nav-item" id="nav-inventory" onclick="showPage('inventory',this)">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -521,12 +547,69 @@
     </div>
   </div>
 
+  <!-- SALES MANAGEMENT: add items & checkout for a chosen date (backfill / manual entry) -->
+  <div class="page" id="page-salesmgmt">
+    <div class="topbar">
+      <div class="topbar-left"><button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><h2>Sales Management</h2></div>
+      <div class="topbar-right" style="gap:8px;align-items:center">
+        <label class="form-label" style="margin:0">Date</label>
+        <input type="date" class="form-control" style="width:auto" id="salesmgmt-date" onchange="onSalesMgmtDateChange()">
+      </div>
+    </div>
+    <div class="page-body" style="display:flex;flex-direction:column;gap:16px;">
+      <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;">
+        <!-- Product picker -->
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <input class="search-input" style="width:100%" placeholder="Search products…" id="salesmgmt-search" oninput="renderSalesMgmtProducts()">
+          <div id="salesmgmt-products" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;overflow-y:auto;padding-right:4px;max-height:360px"></div>
+        </div>
+        <!-- Cart -->
+        <div class="table-wrap" style="display:flex;flex-direction:column;margin-bottom:0;">
+          <div class="table-header"><span class="table-title">New Sale Entry</span><button class="btn btn-ghost btn-sm" onclick="clearSalesMgmtCart()">Clear</button></div>
+          <div id="salesmgmt-cart-items" style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;max-height:280px"></div>
+          <div style="border-top:1px solid var(--border);padding:16px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="color:var(--muted);font-size:13px">Subtotal</span>
+              <span class="mono" id="salesmgmt-cart-subtotal">₱0.00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:14px;">
+              <span style="font-weight:600">Total</span>
+              <span class="sale-total" id="salesmgmt-cart-total">₱0.00</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <select class="form-control" id="salesmgmt-payment-method">
+                <option value="Cash">Cash</option>
+                <option value="Online">Online Payment</option>
+              </select>
+              <button class="btn btn-success" style="flex-shrink:0" onclick="checkoutSalesMgmt()">Checkout</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Listed sales for the selected day -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-title" id="salesmgmt-list-title">Sales for Today</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportSalesMgmtCSV()">Export CSV</button>
+        </div>
+        <table>
+          <thead><tr><th>Ref#</th><th>Time</th><th>Items</th><th>Payment</th><th>Cashier</th><th>Total</th><th>Action</th></tr></thead>
+          <tbody id="salesmgmt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
     <div class="topbar">
       <div class="topbar-left"><button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><h2>Inventory</h2></div>
       <div class="topbar-right">
         <input class="search-input" placeholder="Search products…" id="inv-search" oninput="renderInventory()">
+        <button class="btn btn-ghost btn-sm" onclick="exportInventoryCSV()">Export CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('inv-import-file').click()">Import CSV</button>
+        <input type="file" id="inv-import-file" accept=".csv" style="display:none" onchange="importInventoryCSV(event)">
         <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
       </div>
     </div>
@@ -924,6 +1007,8 @@ const DEFAULT_PRODUCTS = [
 let products = [];
 let sales = [];
 let cart = [];
+let salesMgmtCart = [];
+let salesMgmtCartIdSeq = 1;
 let editSkuTarget = null;
 let restockSkuTarget = null;
 let editUserTarget = null;
@@ -986,6 +1071,7 @@ function refreshCurrentPage() {
   const name = active.id.replace('page-', '');
   if (name === 'dashboard') renderDashboard();
   if (name === 'pos') renderPosProducts();
+  if (name === 'salesmgmt') { renderSalesMgmtProducts(); renderSalesMgmtList(); }
   if (name === 'inventory') renderInventory();
   if (name === 'sales') renderSalesHistory();
   if (name === 'reports') { renderReports(); renderDailyReport(); renderSummaryReport(); }
@@ -1020,6 +1106,7 @@ async function attemptLogin() {
 const PAGE_ACCESS = {
   dashboard: ['staff','admin','superadmin'],
   pos:       ['staff','admin','superadmin'],
+  salesmgmt: ['admin','superadmin'],
   sales:     ['staff','admin','superadmin'],
   inventory: ['admin','superadmin'],
   reports:   ['admin','superadmin'],
@@ -1035,6 +1122,7 @@ function enterApp() {
   document.getElementById('current-user-role').textContent = currentUser.role;
   const isSuperadmin = currentUser.role === 'superadmin';
   const isAdminUp = currentUser.role === 'admin' || isSuperadmin;
+  document.getElementById('nav-salesmgmt').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-inventory').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-reports').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-users').style.display = isSuperadmin ? 'flex' : 'none';
@@ -1176,6 +1264,7 @@ function showPage(name, btn) {
   closeSidebar();
   if (name === 'dashboard') renderDashboard();
   if (name === 'pos') renderPosProducts();
+  if (name === 'salesmgmt') initSalesMgmtPage();
   if (name === 'inventory') renderInventory();
   if (name === 'sales') renderSalesHistory();
   if (name === 'reports') { renderReports(); renderSummaryControls(); renderDailyReport(); renderSummaryReport(); }
@@ -1186,6 +1275,17 @@ function showPage(name, btn) {
 // UTILS
 // ============================
 const peso = v => '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function localDateStr(d) {
+  d = d || new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function localMonthStr(d) {
+  d = d || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
 const genSku = () => 'SKU' + String(products.length + 1 + Math.floor(Math.random()*100)).padStart(3,'0');
 const genRef = () => 'TXN-' + Date.now().toString(36).toUpperCase();
 function fmt(ts) {
@@ -1369,8 +1469,167 @@ function renderCart() {
   document.getElementById('cart-total').textContent = peso(total);
 }
 
+// ============================
+// SALES MANAGEMENT (add items & checkout instantly for a chosen date)
+// ============================
+function selectedSalesMgmtDate() {
+  return document.getElementById('salesmgmt-date').value || localDateStr();
+}
+function initSalesMgmtPage() {
+  const input = document.getElementById('salesmgmt-date');
+  if (!input.value) input.value = localDateStr();
+  renderSalesMgmtProducts();
+  renderSalesMgmtList();
+}
+function onSalesMgmtDateChange() { renderSalesMgmtList(); }
+function buildTsForDate(dateStr) {
+  const now = new Date();
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return new Date(y, m-1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).getTime();
+}
+function isSameLocalDate(ts, dateStr) {
+  const d = new Date(ts);
+  const [y,m,day] = dateStr.split('-').map(Number);
+  return d.getFullYear()===y && d.getMonth()===m-1 && d.getDate()===day;
+}
+function renderSalesMgmtProducts() {
+  const q = (document.getElementById('salesmgmt-search')?.value||'').toLowerCase();
+  const filtered = products.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
+  document.getElementById('salesmgmt-products').innerHTML = filtered.map(p => {
+    const isCourt = p.category === 'Court Rental';
+    const subtitle = isCourt ? 'Tap to book' : (p.infinite ? 'Unlimited' : (p.stock===0?'Out of stock':p.stock+' in stock'));
+    return `
+    <div onclick="addToSalesMgmtCart('${p.sku}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s;${(!isCourt && !p.infinite && p.stock===0)?'opacity:0.4;pointer-events:none':''}">
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">${p.sku}</div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px;line-height:1.3">${p.name}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--accent2);font-family:var(--mono)">${peso(p.price)}${isCourt?'<span style="font-size:11px;font-weight:500">/hr</span>':''}</div>
+      <div style="font-size:11px;color:${!isCourt && !p.infinite && p.stock<=p.low?'var(--warn)':'var(--muted)'};margin-top:4px">${subtitle}</div>
+    </div>`;
+  }).join('');
+  renderSalesMgmtCart();
+}
+function addToSalesMgmtCart(sku) {
+  const p = products.find(x=>x.sku===sku);
+  if (!p) return;
+  if (p.category === 'Court Rental') { openCourtRentalModal(sku, 'salesmgmt'); return; }
+  if (!p.infinite && p.stock === 0) return;
+  const ex = salesMgmtCart.find(c=>c.sku===sku && !c.courtRental);
+  if (ex) { if (p.infinite || ex.qty < p.stock) ex.qty++; }
+  else salesMgmtCart.push({ cartId: salesMgmtCartIdSeq++, sku, name:p.name, price:p.price, qty:1, infinite: !!p.infinite });
+  renderSalesMgmtCart();
+}
+function removeFromSalesMgmtCart(cartId) {
+  salesMgmtCart = salesMgmtCart.filter(c => String(c.cartId) !== String(cartId));
+  renderSalesMgmtCart();
+}
+function changeSalesMgmtQty(cartId, delta) {
+  const item = salesMgmtCart.find(c=>String(c.cartId)===String(cartId));
+  if (!item) return;
+  const p = products.find(x=>x.sku===item.sku);
+  item.qty += delta;
+  if (item.qty <= 0) salesMgmtCart = salesMgmtCart.filter(c=>String(c.cartId)!==String(cartId));
+  else if (p && !p.infinite && item.qty > p.stock) item.qty = p.stock;
+  renderSalesMgmtCart();
+}
+function clearSalesMgmtCart() { salesMgmtCart = []; renderSalesMgmtCart(); }
+function renderSalesMgmtCart() {
+  const total = salesMgmtCart.reduce((a,c)=>a+c.price*c.qty,0);
+  document.getElementById('salesmgmt-cart-items').innerHTML = salesMgmtCart.length ? salesMgmtCart.map(c => {
+    if (c.courtRental) {
+      const cr = c.courtRental;
+      return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Court ${cr.court} · ${cr.name} · ${fmtShortDate(cr.date)} ${cr.timeLabel} · ${cr.hours}hr${cr.hours!==1?'s':''}</div>
+        </div>
+        <div class="mono" style="font-size:12px;font-weight:600;min-width:64px;text-align:right">${peso(c.price*c.qty)}</div>
+        <button class="btn btn-ghost btn-sm" style="padding:3px 7px;color:var(--danger)" onclick="removeFromSalesMgmtCart('${c.cartId}')">✕</button>
+      </div>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">${peso(c.price)} each</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="changeSalesMgmtQty('${c.cartId}',-1)">−</button>
+        <span class="mono" style="min-width:20px;text-align:center">${c.qty}</span>
+        <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="changeSalesMgmtQty('${c.cartId}',1)">+</button>
+      </div>
+      <div class="mono" style="font-size:12px;font-weight:600;min-width:64px;text-align:right">${peso(c.price*c.qty)}</div>
+      <button class="btn btn-ghost btn-sm" style="padding:3px 7px;color:var(--danger)" onclick="removeFromSalesMgmtCart('${c.cartId}')">✕</button>
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">Add items from the left panel.</div>';
+  document.getElementById('salesmgmt-cart-subtotal').textContent = peso(total);
+  document.getElementById('salesmgmt-cart-total').textContent = peso(total);
+}
+async function checkoutSalesMgmt() {
+  if (salesMgmtCart.length === 0) return alert('Cart is empty.');
+  const method = document.getElementById('salesmgmt-payment-method').value;
+  const total = salesMgmtCart.reduce((a,c)=>a+c.price*c.qty,0);
+  const dateStr = selectedSalesMgmtDate();
+  if (!confirm(`Record this sale for ${fmtShortDate(dateStr)}?\n\nTotal: ${peso(total)}\nPayment: ${method}`)) return;
+  const ref = genRef();
+  const ts = buildTsForDate(dateStr);
+  const items = salesMgmtCart.map(c=>({...c}));
+  const cashier = currentUser ? currentUser.name : '';
+  const saleData = { ref, ts, items, total, payment: method, cashier };
+
+  const batch = db.batch();
+  items.forEach(c => {
+    if (!c.infinite) {
+      batch.update(db.collection('products').doc(c.sku), { stock: firebase.firestore.FieldValue.increment(-c.qty) });
+    }
+  });
+  batch.set(db.collection('sales').doc(ref), saleData);
+  batch.commit().catch(err => {
+    console.error('Checkout sync error:', err);
+    alert('The sale was recorded locally but failed to sync to the database — check your internet connection.');
+  });
+
+  showReceipt(saleData);
+  salesMgmtCart = [];
+  renderSalesMgmtCart();
+  renderSalesMgmtProducts();
+  renderSalesMgmtList();
+}
+function renderSalesMgmtList() {
+  const dateStr = selectedSalesMgmtDate();
+  const list = sales.filter(s => isSameLocalDate(s.ts, dateStr)).sort((a,b)=>a.ts-b.ts);
+  const dayTotal = list.reduce((a,s)=>a+s.total,0);
+  document.getElementById('salesmgmt-list-title').textContent =
+    `Sales for ${fmtShortDate(dateStr)} — ${list.length} txn${list.length!==1?'s':''}, ${peso(dayTotal)}`;
+  const isSuperadmin = currentUser && currentUser.role === 'superadmin';
+  document.getElementById('salesmgmt-tbody').innerHTML = list.map(s => `<tr>
+    <td class="mono" style="color:var(--accent)">${s.ref}</td>
+    <td style="font-size:12px;color:var(--muted)">${new Date(s.ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</td>
+    <td>${s.items.length} item${s.items.length!==1?'s':''}</td>
+    <td><span class="badge ${paymentBadgeClass(s.payment)}">${s.payment}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${s.cashier||'-'}</td>
+    <td class="mono" style="font-weight:600;color:var(--accent2)">${peso(s.total)}</td>
+    <td>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick='showReceipt(${JSON.stringify(s)})'>View</button>
+        ${isSuperadmin ? `
+        <button class="btn btn-ghost btn-sm" onclick="openEditSaleModal('${s.ref}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteSale('${s.ref}')">Delete</button>` : ''}
+      </div>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No sales recorded for this date.</td></tr>';
+}
+function exportSalesMgmtCSV() {
+  const dateStr = selectedSalesMgmtDate();
+  const list = sales.filter(s => isSameLocalDate(s.ts, dateStr)).sort((a,b)=>a.ts-b.ts);
+  let csv = 'Ref,Date,Items,Total,Payment,Cashier\n';
+  list.forEach(s => {
+    csv += `${s.ref},"${fmt(s.ts)}","${s.items.map(itemSummary).join('; ')}",${s.total},${s.payment},${s.cashier||''}\n`;
+  });
+  downloadCSV(csv, `sales_${dateStr}.csv`);
+}
+
 // ---- Court Rental booking modal ----
 let courtRentalSkuTarget = null;
+let courtRentalCartTarget = 'pos';
 function populateCourtTimeOptions() {
   const sel = document.getElementById('cr-time');
   let html = '';
@@ -1381,12 +1640,13 @@ function populateCourtTimeOptions() {
   }
   sel.innerHTML = html;
 }
-function openCourtRentalModal(sku) {
+function openCourtRentalModal(sku, target) {
   courtRentalSkuTarget = sku;
+  courtRentalCartTarget = target || 'pos';
   document.getElementById('cr-court').value = '';
   document.getElementById('cr-hours').value = 1;
   document.getElementById('cr-name').value = '';
-  document.getElementById('cr-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('cr-date').value = courtRentalCartTarget === 'salesmgmt' ? selectedSalesMgmtDate() : localDateStr();
   populateCourtTimeOptions();
   document.getElementById('court-error').style.display = 'none';
   updateCourtRentalPreview();
@@ -1411,23 +1671,25 @@ function confirmCourtRental() {
     err.style.display = 'block'; return;
   }
   const timeLabel = new Date('2000-01-01T'+time+':00').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-  cart.push({
-    cartId: cartIdSeq++,
+  const item = {
+    cartId: courtRentalCartTarget === 'salesmgmt' ? salesMgmtCartIdSeq++ : cartIdSeq++,
     sku: p.sku,
     name: p.name,
     price: p.price,
     qty: hours,
     infinite: !!p.infinite,
     courtRental: { court, name, date, time, timeLabel, hours },
-  });
+  };
+  if (courtRentalCartTarget === 'salesmgmt') { salesMgmtCart.push(item); renderSalesMgmtCart(); }
+  else { cart.push(item); renderCart(); }
   closeModal('court-modal');
-  renderCart();
 }
 
 async function checkout() {
   if (cart.length === 0) return alert('Cart is empty.');
   const method = document.getElementById('payment-method').value;
   const total = cart.reduce((a,c)=>a+c.price*c.qty,0);
+  if (!confirm(`Are you sure you want to checkout?\n\nTotal: ${peso(total)}\nPayment: ${method}`)) return;
   const ref = genRef();
   const ts = Date.now();
   const items = cart.map(c=>({...c}));
@@ -1516,6 +1778,83 @@ function renderInventory() {
   }).join('');
 }
 
+function exportInventoryCSV() {
+  let csv = 'SKU,Name,Category,Cost,Price,Stock,LowStockAlert,Infinite\n';
+  products.forEach(p => {
+    csv += `${p.sku},"${(p.name||'').replace(/"/g,'""')}",${p.category||''},${p.cost||0},${p.price||0},${p.infinite ? '' : (p.stock ?? 0)},${p.infinite ? '' : (p.low ?? 5)},${p.infinite ? 'TRUE' : 'FALSE'}\n`;
+  });
+  downloadCSV(csv, 'inventory_export.csv');
+}
+function parseCSVLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+async function importInventoryCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (lines.length < 2) { alert('CSV file has no data rows.'); event.target.value = ''; return; }
+  const header = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+  const col = name => header.indexOf(name);
+  const idx = {
+    sku: col('sku'), name: col('name'), category: col('category'),
+    cost: col('cost'), price: col('price'), stock: col('stock'),
+    low: col('lowstockalert'), infinite: col('infinite')
+  };
+  if (idx.name === -1 || idx.price === -1) {
+    alert('CSV must include at least Name and Price columns.');
+    event.target.value = ''; return;
+  }
+  let added = 0, updated = 0, skipped = 0;
+  const batch = db.batch();
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVLine(lines[i]);
+    if (!row.some(v => v.length)) continue;
+    const name = idx.name > -1 ? row[idx.name] : '';
+    const price = idx.price > -1 ? parseFloat(row[idx.price]) : NaN;
+    if (!name || isNaN(price)) { skipped++; continue; }
+    let sku = idx.sku > -1 ? row[idx.sku] : '';
+    const existing = sku ? products.find(p => p.sku === sku) : null;
+    if (!sku) sku = genSku();
+    const infiniteRaw = idx.infinite > -1 ? row[idx.infinite].toLowerCase() : '';
+    const infinite = infiniteRaw === 'true' || infiniteRaw === 'yes' || infiniteRaw === '1';
+    const stockRaw = idx.stock > -1 ? row[idx.stock] : '';
+    const data = {
+      sku, name,
+      category: (idx.category > -1 && row[idx.category]) ? row[idx.category] : 'General',
+      cost: (idx.cost > -1 && row[idx.cost] !== '') ? parseFloat(row[idx.cost]) || 0 : 0,
+      price,
+      stock: infinite ? null : (stockRaw !== '' && !isNaN(parseInt(stockRaw)) ? parseInt(stockRaw) : (existing && !existing.infinite ? existing.stock : 0)),
+      low: infinite ? 0 : (idx.low > -1 && row[idx.low] !== '' ? parseInt(row[idx.low]) || 5 : (existing ? existing.low : 5)),
+      infinite,
+    };
+    batch.set(db.collection('products').doc(sku), data);
+    if (existing) updated++; else added++;
+  }
+  try {
+    await batch.commit();
+    alert(`Import complete: ${added} added, ${updated} updated${skipped ? `, ${skipped} skipped (missing name/price)` : ''}.`);
+  } catch (e) {
+    alert('Import failed: ' + e.message);
+  }
+  event.target.value = '';
+}
 function toggleInfiniteStock() {
   const inf = document.getElementById('f-infinite').checked;
   document.getElementById('f-stock').disabled = inf;
@@ -1752,7 +2091,9 @@ function renderReports() {
     <div class="kpi-card green"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="font-size:18px">${peso(sum.revenue)}</div><div class="kpi-sub">${sum.count} transactions</div></div>
     <div class="kpi-card"><div class="kpi-label">Total COGS</div><div class="kpi-value" style="font-size:18px">${peso(sum.cogs)}</div></div>
     <div class="kpi-card green"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div><div class="kpi-sub">${sum.revenue>0?(sum.gross/sum.revenue*100).toFixed(1)+'% margin':'-'}</div></div>
-    <div class="kpi-card warn"><div class="kpi-label">Inventory Value</div><div class="kpi-value" style="font-size:18px">${peso(totalInvVal)}</div></div>`;
+    <div class="kpi-card warn"><div class="kpi-label">Inventory Value</div><div class="kpi-value" style="font-size:18px">${peso(totalInvVal)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cash Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.cash)}</div><div class="kpi-sub">${sum.revenue>0?(sum.cash/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Online Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div><div class="kpi-sub">${sum.revenue>0?(sum.online/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>`;
 
   document.getElementById('top-products-tbody').innerHTML = sum.top.map(t => `<tr><td style="font-weight:500">${t.name}</td><td class="mono">${t.qty}</td><td class="mono" style="color:var(--accent2)">${peso(t.rev)}</td></tr>`).join('') || emptyRow(3,'No sales data yet.');
 
@@ -1780,7 +2121,7 @@ function switchReportTab(tab) {
 function renderDailyReport() {
   const dateInput = document.getElementById('daily-date');
   if (!dateInput) return;
-  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0,10);
+  if (!dateInput.value) dateInput.value = localDateStr();
   const [y,m,d] = dateInput.value.split('-').map(Number);
   const start = new Date(y, m-1, d).getTime();
   const end = start + 86400000;
@@ -1841,7 +2182,7 @@ function renderSummaryControls() {
     document.getElementById('summary-week').value = isoWeekValue(now);
   } else if (summaryPeriod === 'monthly') {
     el.innerHTML = `<input type="month" class="form-control" style="width:auto" id="summary-month" onchange="renderSummaryReport()">`;
-    document.getElementById('summary-month').value = now.toISOString().slice(0,7);
+    document.getElementById('summary-month').value = localMonthStr(now);
   } else if (summaryPeriod === 'yearly') {
     el.innerHTML = `<input type="number" class="form-control" style="width:100px" id="summary-year" min="2000" max="2100" onchange="renderSummaryReport()">`;
     document.getElementById('summary-year').value = now.getFullYear();
@@ -1851,8 +2192,8 @@ function renderSummaryControls() {
       <span style="color:var(--muted);font-size:12px">to</span>
       <input type="date" class="form-control" style="width:auto" id="summary-to" onchange="renderSummaryReport()">`;
     const from = new Date(now); from.setDate(from.getDate()-6);
-    document.getElementById('summary-from').value = from.toISOString().slice(0,10);
-    document.getElementById('summary-to').value = now.toISOString().slice(0,10);
+    document.getElementById('summary-from').value = localDateStr(from);
+    document.getElementById('summary-to').value = localDateStr(now);
   }
 }
 function getSummaryRange() {
@@ -1924,6 +2265,7 @@ function exportSummaryCSV() {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(m => {
+  if (m.id === 'product-modal') return; // don't close product modal on outside click (avoid losing in-progress edits)
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
 });
 

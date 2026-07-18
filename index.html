@@ -384,7 +384,7 @@
 
     .login-box { width: 90vw; max-width: 340px; padding: 24px; }
 
-    /* Court rental / report control rows wrap cleanly */
+    /* Report control rows wrap cleanly */
     #summary-period-controls { width: 100%; flex-wrap: wrap; }
   }
 
@@ -466,6 +466,11 @@
       Reports
     </button>
     <div class="nav-section" id="nav-admin-section" style="display:none">Admin</div>
+    <button class="nav-item" id="nav-approvals" style="display:none" onclick="showPage('approvals',this)">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Approvals
+      <span id="approvals-badge" class="badge badge-warn" style="margin-left:auto;display:none"></span>
+    </button>
     <button class="nav-item" id="nav-users" style="display:none" onclick="showPage('users',this)">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       Users
@@ -554,6 +559,8 @@
       <div class="topbar-right" style="gap:8px;align-items:center">
         <label class="form-label" style="margin:0">Date</label>
         <input type="date" class="form-control" style="width:auto" id="salesmgmt-date" onchange="onSalesMgmtDateChange()">
+        <button class="btn btn-success btn-sm" onclick="openAddSaleModal()">+ Add Sale</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="openAddExpenseModal()">+ Add Expense</button>
       </div>
     </div>
     <div class="page-body" style="display:flex;flex-direction:column;gap:16px;">
@@ -598,6 +605,18 @@
           <tbody id="salesmgmt-tbody"></tbody>
         </table>
       </div>
+
+      <!-- Listed expenses for the selected day -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-title" id="salesmgmt-expenses-title">Expenses for Today</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportSalesMgmtExpensesCSV()">Export CSV</button>
+        </div>
+        <table>
+          <thead><tr><th>Ref#</th><th>Time</th><th>Description</th><th>Payment</th><th>Recorded By</th><th>Amount</th><th>Action</th></tr></thead>
+          <tbody id="salesmgmt-expenses-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -638,6 +657,17 @@
         <table>
           <thead><tr><th>Ref#</th><th>Date & Time</th><th>Items</th><th>Payment</th><th>Cashier</th><th>Total</th><th>Action</th></tr></thead>
           <tbody id="sales-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-title">Expenses History</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportExpensesHistoryCSV()">Export CSV</button>
+        </div>
+        <table>
+          <thead><tr><th>Ref#</th><th>Date & Time</th><th>Description</th><th>Payment</th><th>Recorded By</th><th>Amount</th><th>Action</th></tr></thead>
+          <tbody id="expenses-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -687,6 +717,16 @@
             <tbody id="daily-tbody"></tbody>
           </table>
         </div>
+        <div class="table-wrap">
+          <div class="table-header">
+            <span class="table-title">Expenses</span>
+            <button class="btn btn-ghost btn-sm" onclick="exportDailyExpensesCSV()">Export CSV</button>
+          </div>
+          <table>
+            <thead><tr><th>Ref#</th><th>Time</th><th>Description</th><th>Payment</th><th>Recorded By</th><th>Amount</th></tr></thead>
+            <tbody id="daily-expenses-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Summary report -->
@@ -712,6 +752,16 @@
             <tbody id="summary-payment-tbody"></tbody></table>
           </div>
         </div>
+        <div class="table-wrap">
+          <div class="table-header">
+            <span class="table-title">Expenses in Period</span>
+            <button class="btn btn-ghost btn-sm" onclick="exportSummaryExpensesCSV()">Export CSV</button>
+          </div>
+          <table>
+            <thead><tr><th>Ref#</th><th>Date</th><th>Description</th><th>Payment</th><th>Recorded By</th><th>Amount</th></tr></thead>
+            <tbody id="summary-expenses-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
     </div>
@@ -730,6 +780,28 @@
         <table>
           <thead><tr><th>Name</th><th>Role</th><th>Actions</th></tr></thead>
           <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <!-- APPROVALS (superadmin only) -->
+  <div class="page" id="page-approvals">
+    <div class="topbar">
+      <div class="topbar-left"><button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button><h2>Approvals</h2></div>
+    </div>
+    <div class="page-body">
+      <div class="table-wrap">
+        <div class="table-header"><span class="table-title" id="approvals-pending-title">Pending Requests</span></div>
+        <table>
+          <thead><tr><th>Req#</th><th>Type</th><th>Target Ref</th><th>Requested By</th><th>Requested At</th><th>Change Summary</th><th>Action</th></tr></thead>
+          <tbody id="approvals-pending-tbody"></tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><span class="table-title">Resolved Requests</span></div>
+        <table>
+          <thead><tr><th>Req#</th><th>Type</th><th>Target Ref</th><th>Requested By</th><th>Status</th><th>Reviewed By</th><th>Reviewed At</th></tr></thead>
+          <tbody id="approvals-resolved-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -762,7 +834,6 @@
             <option>Canteen</option>
             <option>Merchandise</option>
             <option>Services</option>
-            <option>Court Rental</option>
             <option>Others</option>
           </select>
         </div>
@@ -841,47 +912,99 @@
   </div>
 </div>
 
-<!-- Court Rental Booking Modal -->
-<div class="modal-overlay" id="court-modal">
-  <div class="modal" style="width:420px">
+<!-- Add Manual Sale Modal -->
+<div class="modal-overlay" id="add-sale-modal">
+  <div class="modal" style="width:400px">
     <div class="modal-head">
-      <h3>Court Rental Booking</h3>
-      <button class="close-btn" onclick="closeModal('court-modal')">✕</button>
+      <h3>Add Sale</h3>
+      <button class="close-btn" onclick="closeModal('add-sale-modal')">✕</button>
     </div>
     <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Court Number *</label>
-          <input class="form-control" type="number" id="cr-court" min="1" placeholder="e.g. 1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Number of Hours *</label>
-          <input class="form-control" type="number" id="cr-hours" min="1" step="1" value="1" oninput="updateCourtRentalPreview()">
-        </div>
+      <div class="form-group">
+        <label class="form-label">Description *</label>
+        <input class="form-control" id="as-description" placeholder="e.g. Walk-in open play fee">
       </div>
       <div class="form-group">
-        <label class="form-label">Customer Name *</label>
-        <input class="form-control" id="cr-name" placeholder="e.g. Juan Dela Cruz">
+        <label class="form-label">Amount (₱) *</label>
+        <input class="form-control" type="number" id="as-amount" placeholder="0.00" min="0" step="0.01">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Date *</label>
-          <input class="form-control" type="date" id="cr-date">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Start Time (hourly) *</label>
-          <select class="form-control" id="cr-time"></select>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Payment Method</label>
+        <select class="form-control" id="as-payment">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online Payment</option>
+        </select>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:12px;margin-top:2px">
-        <span style="font-size:13px;color:var(--muted)">Total (<span id="cr-rate-preview"></span>/hr)</span>
-        <span class="mono" id="cr-total-preview" style="font-weight:700;color:var(--accent2);font-size:16px"></span>
-      </div>
-      <div id="court-error" style="color:var(--danger);font-size:12px;display:none;"></div>
+      <div id="add-sale-error" style="color:var(--danger);font-size:12px;display:none;"></div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal('court-modal')">Cancel</button>
-      <button class="btn btn-success" onclick="confirmCourtRental()">Add to Cart</button>
+      <button class="btn btn-ghost" onclick="closeModal('add-sale-modal')">Cancel</button>
+      <button class="btn btn-success" onclick="confirmAddSale()">Add Sale</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Manual Expense Modal -->
+<div class="modal-overlay" id="add-expense-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-head">
+      <h3>Add Expense</h3>
+      <button class="close-btn" onclick="closeModal('add-expense-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Description *</label>
+        <input class="form-control" id="ae-description" placeholder="e.g. Court supplies restock">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount (₱) *</label>
+        <input class="form-control" type="number" id="ae-amount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Method</label>
+        <select class="form-control" id="ae-payment">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online Payment</option>
+        </select>
+      </div>
+      <div id="add-expense-error" style="color:var(--danger);font-size:12px;display:none;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('add-expense-modal')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmAddExpense()">Add Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Expense Modal -->
+<div class="modal-overlay" id="edit-expense-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-head">
+      <h3>Edit Expense: <span id="ee-ref" class="mono" style="font-size:13px;color:var(--danger)"></span></h3>
+      <button class="close-btn" onclick="closeModal('edit-expense-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Description *</label>
+        <input class="form-control" id="ee-description" placeholder="e.g. Court supplies restock">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount (₱) *</label>
+        <input class="form-control" type="number" id="ee-amount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Method</label>
+        <select class="form-control" id="ee-payment">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online Payment</option>
+        </select>
+      </div>
+      <div class="alert alert-warn" style="margin-top:4px" id="ee-warning">Superadmin override: this directly rewrites a past expense entry.</div>
+      <div id="edit-expense-error" style="color:var(--danger);font-size:12px;display:none;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('edit-expense-modal')">Cancel</button>
+      <button class="btn btn-primary" id="ee-save-btn" onclick="saveEditedExpense()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -948,12 +1071,12 @@
         <span style="font-weight:600">New Total</span>
         <span class="sale-total" id="es-total-preview"></span>
       </div>
-      <div class="alert alert-warn" style="margin-top:4px">Superadmin override: changing quantities will adjust inventory stock to match. This directly rewrites a past transaction — use carefully.</div>
+      <div class="alert alert-warn" style="margin-top:4px" id="es-warning">Superadmin override: changing quantities will adjust inventory stock to match. This directly rewrites a past transaction — use carefully.</div>
       <div id="edit-sale-error" style="color:var(--danger);font-size:12px;display:none;"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('edit-sale-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveEditedSale()">Save Changes</button>
+      <button class="btn btn-primary" id="es-save-btn" onclick="saveEditedSale()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -998,7 +1121,6 @@ const DEFAULT_PRODUCTS = [
   { sku:'SKU005', name:'Energy Drink 330ml', category:'Canteen', cost:35, price:65, stock:48, low:12, infinite:false },
   { sku:'SKU006', name:'Water Bottle 1L', category:'Canteen', cost:60, price:130, stock:9, low:10, infinite:false },
   { sku:'SKU007', name:'Grip Gloves (Pair)', category:'Merchandise', cost:200, price:450, stock:14, low:5, infinite:false },
-  { sku:'SKU008', name:'Court Rental (1hr)', category:'Court Rental', cost:0, price:300, stock:null, low:0, infinite:true },
 ];
 
 // ============================
@@ -1006,6 +1128,8 @@ const DEFAULT_PRODUCTS = [
 // ============================
 let products = [];
 let sales = [];
+let expenses = [];
+let saleApprovals = [];
 let cart = [];
 let salesMgmtCart = [];
 let salesMgmtCartIdSeq = 1;
@@ -1064,6 +1188,15 @@ function attachLiveListeners() {
     sales = snap.docs.map(d => d.data()).sort((a,b) => a.ts - b.ts);
     refreshCurrentPage();
   });
+  db.collection('expenses').onSnapshot(snap => {
+    expenses = snap.docs.map(d => d.data()).sort((a,b) => a.ts - b.ts);
+    refreshCurrentPage();
+  });
+  db.collection('saleApprovals').onSnapshot(snap => {
+    saleApprovals = snap.docs.map(d => d.data()).sort((a,b) => b.requestedAt - a.requestedAt);
+    updateApprovalsBadge();
+    refreshCurrentPage();
+  });
 }
 function refreshCurrentPage() {
   const active = document.querySelector('.page.active');
@@ -1071,10 +1204,11 @@ function refreshCurrentPage() {
   const name = active.id.replace('page-', '');
   if (name === 'dashboard') renderDashboard();
   if (name === 'pos') renderPosProducts();
-  if (name === 'salesmgmt') { renderSalesMgmtProducts(); renderSalesMgmtList(); }
+  if (name === 'salesmgmt') { renderSalesMgmtProducts(); renderSalesMgmtList(); renderSalesMgmtExpenses(); }
   if (name === 'inventory') renderInventory();
-  if (name === 'sales') renderSalesHistory();
+  if (name === 'sales') { renderSalesHistory(); renderExpensesHistory(); }
   if (name === 'reports') { renderReports(); renderDailyReport(); renderSummaryReport(); }
+  if (name === 'approvals') renderApprovals();
   if (name === 'users') renderUsers();
 }
 
@@ -1110,6 +1244,7 @@ const PAGE_ACCESS = {
   sales:     ['staff','admin','superadmin'],
   inventory: ['admin','superadmin'],
   reports:   ['admin','superadmin'],
+  approvals: ['superadmin'],
   users:     ['superadmin'],
 };
 function canAccess(page) {
@@ -1126,6 +1261,7 @@ function enterApp() {
   document.getElementById('nav-inventory').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-reports').style.display = isAdminUp ? 'flex' : 'none';
   document.getElementById('nav-users').style.display = isSuperadmin ? 'flex' : 'none';
+  document.getElementById('nav-approvals').style.display = isSuperadmin ? 'flex' : 'none';
   document.getElementById('nav-admin-section').style.display = isSuperadmin ? 'block' : 'none';
   showPage('dashboard', document.getElementById('nav-dashboard'));
 }
@@ -1266,8 +1402,9 @@ function showPage(name, btn) {
   if (name === 'pos') renderPosProducts();
   if (name === 'salesmgmt') initSalesMgmtPage();
   if (name === 'inventory') renderInventory();
-  if (name === 'sales') renderSalesHistory();
+  if (name === 'sales') { renderSalesHistory(); renderExpensesHistory(); }
   if (name === 'reports') { renderReports(); renderSummaryControls(); renderDailyReport(); renderSummaryReport(); }
+  if (name === 'approvals') renderApprovals();
   if (name === 'users') renderUsers();
 }
 
@@ -1288,6 +1425,40 @@ function localMonthStr(d) {
 }
 const genSku = () => 'SKU' + String(products.length + 1 + Math.floor(Math.random()*100)).padStart(3,'0');
 const genRef = () => 'TXN-' + Date.now().toString(36).toUpperCase();
+const genExpRef = () => 'EXP-' + Date.now().toString(36).toUpperCase();
+const genApprovalRef = () => 'APR-' + Date.now().toString(36).toUpperCase();
+function pendingApprovalFor(targetRef) {
+  return saleApprovals.find(a => a.targetRef === targetRef && a.status === 'pending');
+}
+function saleActionButtons(s) {
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return '';
+  const pending = pendingApprovalFor(s.ref);
+  if (pending) {
+    return `<span class="badge badge-warn" title="Requested by ${pending.requestedBy||''}">Pending ${pending.type === 'delete_sale' ? 'deletion' : 'edit'} approval</span>`;
+  }
+  return `
+    <button class="btn btn-ghost btn-sm" onclick="openEditSaleModal('${s.ref}')">Edit</button>
+    <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteSale('${s.ref}')">Delete</button>`;
+}
+function expenseActionButtons(e) {
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return '';
+  const pending = pendingApprovalFor(e.ref);
+  if (pending) {
+    return `<span class="badge badge-warn" title="Requested by ${pending.requestedBy||''}">Pending ${pending.type === 'delete_expense' ? 'deletion' : 'edit'} approval</span>`;
+  }
+  return `
+    <button class="btn btn-ghost btn-sm" onclick="openEditExpenseModal('${e.ref}')">Edit</button>
+    <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteExpense('${e.ref}')">Delete</button>`;
+}
+function updateApprovalsBadge() {
+  const badge = document.getElementById('approvals-badge');
+  if (!badge) return;
+  const count = saleApprovals.filter(a => a.status === 'pending').length;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'inline-block' : 'none';
+}
 function fmt(ts) {
   const d = new Date(ts);
   return d.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) + ' ' +
@@ -1310,6 +1481,9 @@ function renderDashboard() {
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todaySales = sales.filter(s => s.ts >= todayStart.getTime());
   const todayRev = todaySales.reduce((a,s) => a + s.total, 0);
+  const todayExpenses = expenses.filter(e => e.ts >= todayStart.getTime());
+  const todayExpTotal = todayExpenses.reduce((a,e) => a + e.amount, 0);
+  const todayNet = todayRev - todayExpTotal;
   const totalStock = products.reduce((a,p) => a + (p.infinite ? 0 : p.stock), 0);
   const lowCount = products.filter(p => !p.infinite && p.stock <= p.low).length;
   const totalInvValue = products.reduce((a,p) => a + (p.infinite ? 0 : p.stock * p.cost), 0);
@@ -1319,6 +1493,16 @@ function renderDashboard() {
       <div class="kpi-label">Today's Revenue</div>
       <div class="kpi-value">${peso(todayRev)}</div>
       <div class="kpi-sub">${todaySales.length} transaction${todaySales.length!==1?'s':''}</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Today's Expenses</div>
+      <div class="kpi-value">${peso(todayExpTotal)}</div>
+      <div class="kpi-sub">${todayExpenses.length} entr${todayExpenses.length!==1?'ies':'y'}</div>
+    </div>
+    <div class="kpi-card ${todayNet>=0?'green':'red'}">
+      <div class="kpi-label">Net Today</div>
+      <div class="kpi-value">${peso(todayNet)}</div>
+      <div class="kpi-sub">revenue minus expenses</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Total Products</div>
@@ -1388,14 +1572,13 @@ function renderPosProducts() {
   const q = (document.getElementById('pos-search')?.value||'').toLowerCase();
   const filtered = products.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
   document.getElementById('pos-products').innerHTML = filtered.map(p => {
-    const isCourt = p.category === 'Court Rental';
-    const subtitle = isCourt ? 'Tap to book' : (p.infinite ? 'Unlimited' : (p.stock===0?'Out of stock':p.stock+' in stock'));
+    const subtitle = p.infinite ? 'Unlimited' : (p.stock===0?'Out of stock':p.stock+' in stock');
     return `
-    <div onclick="addToCart('${p.sku}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s;${(!isCourt && !p.infinite && p.stock===0)?'opacity:0.4;pointer-events:none':''}">
+    <div onclick="addToCart('${p.sku}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s;${(!p.infinite && p.stock===0)?'opacity:0.4;pointer-events:none':''}">
       <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">${p.sku}</div>
       <div style="font-size:12px;font-weight:600;margin-bottom:6px;line-height:1.3">${p.name}</div>
-      <div style="font-size:15px;font-weight:700;color:var(--accent2);font-family:var(--mono)">${peso(p.price)}${isCourt?'<span style="font-size:11px;font-weight:500">/hr</span>':''}</div>
-      <div style="font-size:11px;color:${!isCourt && !p.infinite && p.stock<=p.low?'var(--warn)':'var(--muted)'};margin-top:4px">${subtitle}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--accent2);font-family:var(--mono)">${peso(p.price)}</div>
+      <div style="font-size:11px;color:${!p.infinite && p.stock<=p.low?'var(--warn)':'var(--muted)'};margin-top:4px">${subtitle}</div>
     </div>`;
   }).join('');
   renderCart();
@@ -1404,9 +1587,8 @@ let cartIdSeq = 1;
 function addToCart(sku) {
   const p = products.find(x=>x.sku===sku);
   if (!p) return;
-  if (p.category === 'Court Rental') { openCourtRentalModal(sku); return; }
   if (!p.infinite && p.stock === 0) return;
-  const ex = cart.find(c=>c.sku===sku && !c.courtRental);
+  const ex = cart.find(c=>c.sku===sku);
   if (ex) { if (p.infinite || ex.qty < p.stock) ex.qty++; }
   else cart.push({ cartId: cartIdSeq++, sku, name:p.name, price:p.price, qty:1, infinite: !!p.infinite });
   renderCart();
@@ -1431,26 +1613,11 @@ function fmtShortDate(dateStr) {
   return new Date(y,m-1,d).toLocaleDateString('en-PH',{month:'short',day:'numeric'});
 }
 function itemSummary(i) {
-  if (i.courtRental) {
-    const cr = i.courtRental;
-    return `${i.name} (Court ${cr.court}, ${cr.name}, ${fmtShortDate(cr.date)} ${cr.timeLabel}, ${cr.hours}hr${cr.hours!==1?'s':''})`;
-  }
   return `${i.name} ×${i.qty}`;
 }
 function renderCart() {
   const total = cart.reduce((a,c)=>a+c.price*c.qty,0);
   document.getElementById('cart-items').innerHTML = cart.length ? cart.map(c => {
-    if (c.courtRental) {
-      const cr = c.courtRental;
-      return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">Court ${cr.court} · ${cr.name} · ${fmtShortDate(cr.date)} ${cr.timeLabel} · ${cr.hours}hr${cr.hours!==1?'s':''}</div>
-        </div>
-        <div class="mono" style="font-size:12px;font-weight:600;min-width:64px;text-align:right">${peso(c.price*c.qty)}</div>
-        <button class="btn btn-ghost btn-sm" style="padding:3px 7px;color:var(--danger)" onclick="removeFromCart('${c.cartId}')">✕</button>
-      </div>`;
-    }
     return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
@@ -1480,8 +1647,9 @@ function initSalesMgmtPage() {
   if (!input.value) input.value = localDateStr();
   renderSalesMgmtProducts();
   renderSalesMgmtList();
+  renderSalesMgmtExpenses();
 }
-function onSalesMgmtDateChange() { renderSalesMgmtList(); }
+function onSalesMgmtDateChange() { renderSalesMgmtList(); renderSalesMgmtExpenses(); }
 function buildTsForDate(dateStr) {
   const now = new Date();
   const [y,m,d] = dateStr.split('-').map(Number);
@@ -1496,14 +1664,13 @@ function renderSalesMgmtProducts() {
   const q = (document.getElementById('salesmgmt-search')?.value||'').toLowerCase();
   const filtered = products.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
   document.getElementById('salesmgmt-products').innerHTML = filtered.map(p => {
-    const isCourt = p.category === 'Court Rental';
-    const subtitle = isCourt ? 'Tap to book' : (p.infinite ? 'Unlimited' : (p.stock===0?'Out of stock':p.stock+' in stock'));
+    const subtitle = p.infinite ? 'Unlimited' : (p.stock===0?'Out of stock':p.stock+' in stock');
     return `
-    <div onclick="addToSalesMgmtCart('${p.sku}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s;${(!isCourt && !p.infinite && p.stock===0)?'opacity:0.4;pointer-events:none':''}">
+    <div onclick="addToSalesMgmtCart('${p.sku}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all 0.15s;${(!p.infinite && p.stock===0)?'opacity:0.4;pointer-events:none':''}">
       <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">${p.sku}</div>
       <div style="font-size:12px;font-weight:600;margin-bottom:6px;line-height:1.3">${p.name}</div>
-      <div style="font-size:15px;font-weight:700;color:var(--accent2);font-family:var(--mono)">${peso(p.price)}${isCourt?'<span style="font-size:11px;font-weight:500">/hr</span>':''}</div>
-      <div style="font-size:11px;color:${!isCourt && !p.infinite && p.stock<=p.low?'var(--warn)':'var(--muted)'};margin-top:4px">${subtitle}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--accent2);font-family:var(--mono)">${peso(p.price)}</div>
+      <div style="font-size:11px;color:${!p.infinite && p.stock<=p.low?'var(--warn)':'var(--muted)'};margin-top:4px">${subtitle}</div>
     </div>`;
   }).join('');
   renderSalesMgmtCart();
@@ -1511,9 +1678,8 @@ function renderSalesMgmtProducts() {
 function addToSalesMgmtCart(sku) {
   const p = products.find(x=>x.sku===sku);
   if (!p) return;
-  if (p.category === 'Court Rental') { openCourtRentalModal(sku, 'salesmgmt'); return; }
   if (!p.infinite && p.stock === 0) return;
-  const ex = salesMgmtCart.find(c=>c.sku===sku && !c.courtRental);
+  const ex = salesMgmtCart.find(c=>c.sku===sku);
   if (ex) { if (p.infinite || ex.qty < p.stock) ex.qty++; }
   else salesMgmtCart.push({ cartId: salesMgmtCartIdSeq++, sku, name:p.name, price:p.price, qty:1, infinite: !!p.infinite });
   renderSalesMgmtCart();
@@ -1535,17 +1701,6 @@ function clearSalesMgmtCart() { salesMgmtCart = []; renderSalesMgmtCart(); }
 function renderSalesMgmtCart() {
   const total = salesMgmtCart.reduce((a,c)=>a+c.price*c.qty,0);
   document.getElementById('salesmgmt-cart-items').innerHTML = salesMgmtCart.length ? salesMgmtCart.map(c => {
-    if (c.courtRental) {
-      const cr = c.courtRental;
-      return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">Court ${cr.court} · ${cr.name} · ${fmtShortDate(cr.date)} ${cr.timeLabel} · ${cr.hours}hr${cr.hours!==1?'s':''}</div>
-        </div>
-        <div class="mono" style="font-size:12px;font-weight:600;min-width:64px;text-align:right">${peso(c.price*c.qty)}</div>
-        <button class="btn btn-ghost btn-sm" style="padding:3px 7px;color:var(--danger)" onclick="removeFromSalesMgmtCart('${c.cartId}')">✕</button>
-      </div>`;
-    }
     return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
@@ -1599,7 +1754,6 @@ function renderSalesMgmtList() {
   const dayTotal = list.reduce((a,s)=>a+s.total,0);
   document.getElementById('salesmgmt-list-title').textContent =
     `Sales for ${fmtShortDate(dateStr)} — ${list.length} txn${list.length!==1?'s':''}, ${peso(dayTotal)}`;
-  const isSuperadmin = currentUser && currentUser.role === 'superadmin';
   document.getElementById('salesmgmt-tbody').innerHTML = list.map(s => `<tr>
     <td class="mono" style="color:var(--accent)">${s.ref}</td>
     <td style="font-size:12px;color:var(--muted)">${new Date(s.ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</td>
@@ -1608,11 +1762,9 @@ function renderSalesMgmtList() {
     <td style="font-size:12px;color:var(--muted)">${s.cashier||'-'}</td>
     <td class="mono" style="font-weight:600;color:var(--accent2)">${peso(s.total)}</td>
     <td>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-ghost btn-sm" onclick='showReceipt(${JSON.stringify(s)})'>View</button>
-        ${isSuperadmin ? `
-        <button class="btn btn-ghost btn-sm" onclick="openEditSaleModal('${s.ref}')">Edit</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteSale('${s.ref}')">Delete</button>` : ''}
+        ${saleActionButtons(s)}
       </div>
     </td>
   </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No sales recorded for this date.</td></tr>';
@@ -1627,62 +1779,194 @@ function exportSalesMgmtCSV() {
   downloadCSV(csv, `sales_${dateStr}.csv`);
 }
 
-// ---- Court Rental booking modal ----
-let courtRentalSkuTarget = null;
-let courtRentalCartTarget = 'pos';
-function populateCourtTimeOptions() {
-  const sel = document.getElementById('cr-time');
-  let html = '';
-  for (let h = 5; h <= 22; h++) {
-    const value = String(h).padStart(2,'0') + ':00';
-    const label = new Date(2000,0,1,h,0).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-    html += `<option value="${value}">${label}</option>`;
-  }
-  sel.innerHTML = html;
+// ---- Manual sale entry (Sales Management) ----
+function openAddSaleModal() {
+  document.getElementById('as-description').value = '';
+  document.getElementById('as-amount').value = '';
+  document.getElementById('as-payment').value = 'Cash';
+  document.getElementById('add-sale-error').style.display = 'none';
+  openModal('add-sale-modal');
 }
-function openCourtRentalModal(sku, target) {
-  courtRentalSkuTarget = sku;
-  courtRentalCartTarget = target || 'pos';
-  document.getElementById('cr-court').value = '';
-  document.getElementById('cr-hours').value = 1;
-  document.getElementById('cr-name').value = '';
-  document.getElementById('cr-date').value = courtRentalCartTarget === 'salesmgmt' ? selectedSalesMgmtDate() : localDateStr();
-  populateCourtTimeOptions();
-  document.getElementById('court-error').style.display = 'none';
-  updateCourtRentalPreview();
-  openModal('court-modal');
-}
-function updateCourtRentalPreview() {
-  const p = products.find(x=>x.sku===courtRentalSkuTarget);
-  const hours = parseInt(document.getElementById('cr-hours').value) || 0;
-  document.getElementById('cr-rate-preview').textContent = p ? peso(p.price) : '—';
-  document.getElementById('cr-total-preview').textContent = peso(p ? p.price * hours : 0);
-}
-function confirmCourtRental() {
-  const p = products.find(x=>x.sku===courtRentalSkuTarget);
-  const court = document.getElementById('cr-court').value.trim();
-  const hours = parseInt(document.getElementById('cr-hours').value);
-  const name = document.getElementById('cr-name').value.trim();
-  const date = document.getElementById('cr-date').value;
-  const time = document.getElementById('cr-time').value;
-  const err = document.getElementById('court-error');
-  if (!p || !court || !name || !date || !time || !hours || hours < 1) {
-    err.textContent = 'All fields are required.';
+async function confirmAddSale() {
+  const description = document.getElementById('as-description').value.trim();
+  const amount = parseFloat(document.getElementById('as-amount').value);
+  const method = document.getElementById('as-payment').value;
+  const err = document.getElementById('add-sale-error');
+  if (!description || !amount || amount <= 0) {
+    err.textContent = 'Description and a valid amount are required.';
     err.style.display = 'block'; return;
   }
-  const timeLabel = new Date('2000-01-01T'+time+':00').toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-  const item = {
-    cartId: courtRentalCartTarget === 'salesmgmt' ? salesMgmtCartIdSeq++ : cartIdSeq++,
-    sku: p.sku,
-    name: p.name,
-    price: p.price,
-    qty: hours,
-    infinite: !!p.infinite,
-    courtRental: { court, name, date, time, timeLabel, hours },
+  const dateStr = selectedSalesMgmtDate();
+  const ref = genRef();
+  const ts = buildTsForDate(dateStr);
+  const cashier = currentUser ? currentUser.name : '';
+  const saleData = {
+    ref, ts, total: amount, payment: method, cashier, manual: true,
+    items: [{ cartId: 1, sku: '', name: description, price: amount, qty: 1, infinite: true }],
   };
-  if (courtRentalCartTarget === 'salesmgmt') { salesMgmtCart.push(item); renderSalesMgmtCart(); }
-  else { cart.push(item); renderCart(); }
-  closeModal('court-modal');
+  try {
+    await db.collection('sales').doc(ref).set(saleData);
+  } catch (err2) {
+    console.error('Add sale sync error:', err2);
+    alert('Failed to save the sale — check your internet connection.');
+    return;
+  }
+  closeModal('add-sale-modal');
+  showReceipt(saleData);
+}
+
+// ---- Manual expense entry (Sales Management) ----
+function openAddExpenseModal() {
+  document.getElementById('ae-description').value = '';
+  document.getElementById('ae-amount').value = '';
+  document.getElementById('ae-payment').value = 'Cash';
+  document.getElementById('add-expense-error').style.display = 'none';
+  openModal('add-expense-modal');
+}
+async function confirmAddExpense() {
+  const description = document.getElementById('ae-description').value.trim();
+  const amount = parseFloat(document.getElementById('ae-amount').value);
+  const method = document.getElementById('ae-payment').value;
+  const err = document.getElementById('add-expense-error');
+  if (!description || !amount || amount <= 0) {
+    err.textContent = 'Description and a valid amount are required.';
+    err.style.display = 'block'; return;
+  }
+  const dateStr = selectedSalesMgmtDate();
+  const ref = genExpRef();
+  const ts = buildTsForDate(dateStr);
+  const cashier = currentUser ? currentUser.name : '';
+  const expenseData = { ref, ts, description, amount, payment: method, cashier };
+  try {
+    await db.collection('expenses').doc(ref).set(expenseData);
+  } catch (err2) {
+    console.error('Add expense sync error:', err2);
+    alert('Failed to save the expense — check your internet connection.');
+    return;
+  }
+  closeModal('add-expense-modal');
+}
+function renderSalesMgmtExpenses() {
+  const dateStr = selectedSalesMgmtDate();
+  const list = expenses.filter(e => isSameLocalDate(e.ts, dateStr)).sort((a,b)=>a.ts-b.ts);
+  const dayTotal = list.reduce((a,e)=>a+e.amount,0);
+  document.getElementById('salesmgmt-expenses-title').textContent =
+    `Expenses for ${fmtShortDate(dateStr)} — ${list.length} entr${list.length!==1?'ies':'y'}, ${peso(dayTotal)}`;
+  document.getElementById('salesmgmt-expenses-tbody').innerHTML = list.map(e => `<tr>
+    <td class="mono" style="color:var(--danger)">${e.ref}</td>
+    <td style="font-size:12px;color:var(--muted)">${new Date(e.ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</td>
+    <td>${e.description}</td>
+    <td><span class="badge ${paymentBadgeClass(e.payment)}">${e.payment}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${e.cashier||'-'}</td>
+    <td class="mono" style="font-weight:600;color:var(--danger)">${peso(e.amount)}</td>
+    <td>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${expenseActionButtons(e)}</div>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No expenses recorded for this date.</td></tr>';
+}
+function openEditExpenseModal(ref) {
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
+  if (pendingApprovalFor(ref)) { alert('This expense already has a pending approval request.'); return; }
+  const e = expenses.find(x => x.ref === ref);
+  if (!e) return;
+  editExpenseTarget = ref;
+  document.getElementById('ee-ref').textContent = e.ref;
+  document.getElementById('ee-description').value = e.description;
+  document.getElementById('ee-amount').value = e.amount;
+  document.getElementById('ee-payment').value = e.payment;
+  document.getElementById('edit-expense-error').style.display = 'none';
+  const isSuperadmin = currentUser.role === 'superadmin';
+  document.getElementById('ee-warning').textContent = isSuperadmin
+    ? 'Superadmin override: this directly rewrites a past expense entry.'
+    : 'Your changes will be sent to a superadmin for approval before they take effect.';
+  document.getElementById('ee-save-btn').textContent = isSuperadmin ? 'Save Changes' : 'Submit for Approval';
+  openModal('edit-expense-modal');
+}
+async function saveEditedExpense() {
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
+  const description = document.getElementById('ee-description').value.trim();
+  const amount = parseFloat(document.getElementById('ee-amount').value);
+  const payment = document.getElementById('ee-payment').value;
+  const err = document.getElementById('edit-expense-error');
+  if (!description || !amount || amount <= 0) {
+    err.textContent = 'Description and a valid amount are required.';
+    err.style.display = 'block'; return;
+  }
+  const orig = expenses.find(x => x.ref === editExpenseTarget);
+  if (!orig) { err.textContent = 'The original expense no longer exists.'; err.style.display = 'block'; return; }
+
+  if (currentUser.role !== 'superadmin') {
+    const reqRef = genApprovalRef();
+    const approval = {
+      ref: reqRef, type: 'edit_expense', targetRef: editExpenseTarget,
+      requestedBy: currentUser.name, requestedAt: Date.now(), status: 'pending',
+      reviewedBy: '', reviewedAt: null,
+      originalDescription: orig.description, originalAmount: orig.amount, originalPayment: orig.payment, originalCashier: orig.cashier || '',
+      proposedDescription: description, proposedAmount: amount, proposedPayment: payment, proposedCashier: orig.cashier || '',
+    };
+    try {
+      await db.collection('saleApprovals').doc(reqRef).set(approval);
+      closeModal('edit-expense-modal');
+      alert('Edit request submitted. A superadmin must approve it before the expense is updated.');
+    } catch (e) {
+      err.textContent = 'Failed to submit request: ' + e.message;
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  try {
+    await db.collection('expenses').doc(editExpenseTarget).update({ description, amount, payment });
+    closeModal('edit-expense-modal');
+  } catch (e) {
+    err.textContent = 'Failed to save changes: ' + e.message;
+    err.style.display = 'block';
+  }
+}
+async function deleteExpense(ref) {
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
+  if (pendingApprovalFor(ref)) { alert('This expense already has a pending approval request.'); return; }
+  const e = expenses.find(x => x.ref === ref);
+  if (!e) return;
+
+  if (currentUser.role !== 'superadmin') {
+    if (!confirm('Submit a request to delete this expense? A superadmin will need to approve it.')) return;
+    const reqRef = genApprovalRef();
+    const approval = {
+      ref: reqRef, type: 'delete_expense', targetRef: ref,
+      requestedBy: currentUser.name, requestedAt: Date.now(), status: 'pending',
+      reviewedBy: '', reviewedAt: null,
+      originalDescription: e.description, originalAmount: e.amount, originalPayment: e.payment, originalCashier: e.cashier || '',
+      proposedDescription: null, proposedAmount: null, proposedPayment: null, proposedCashier: null,
+    };
+    try {
+      await db.collection('saleApprovals').doc(reqRef).set(approval);
+      alert('Delete request submitted. A superadmin must approve it before the expense is removed.');
+    } catch (err) {
+      alert('Failed to submit request: ' + err.message);
+    }
+    return;
+  }
+
+  if (!confirm('Delete this expense entry? This cannot be undone.')) return;
+  try {
+    await db.collection('expenses').doc(ref).delete();
+  } catch (err) {
+    console.error('Delete expense error:', err);
+    alert('Failed to delete the expense — check your internet connection.');
+  }
+}
+function exportSalesMgmtExpensesCSV() {
+  const dateStr = selectedSalesMgmtDate();
+  const list = expenses.filter(e => isSameLocalDate(e.ts, dateStr)).sort((a,b)=>a.ts-b.ts);
+  let csv = 'Ref,Date,Description,Amount,Payment,Recorded By\n';
+  list.forEach(e => {
+    csv += `${e.ref},"${fmt(e.ts)}","${e.description}",${e.amount},${e.payment},${e.cashier||''}\n`;
+  });
+  downloadCSV(csv, `expenses_${dateStr}.csv`);
 }
 
 async function checkout() {
@@ -1721,14 +2005,7 @@ function showReceipt(tx) {
       <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">${tx.ref}</div>
     </div>
     <div style="border-top:1px dashed var(--border);margin-bottom:12px;padding-top:12px">
-      ${tx.items.map(i=> i.courtRental ? `
-        <div style="margin-bottom:8px;font-size:13px">
-          <div style="display:flex;justify-content:space-between">
-            <span>${i.name} (${i.courtRental.hours}hr${i.courtRental.hours!==1?'s':''})</span>
-            <span class="mono">${peso(i.price*i.qty)}</span>
-          </div>
-          <div style="font-size:11px;color:var(--muted)">Court ${i.courtRental.court} · ${i.courtRental.name} · ${fmtShortDate(i.courtRental.date)} ${i.courtRental.timeLabel}</div>
-        </div>` : `
+      ${tx.items.map(i=> `
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
           <span>${i.name} × ${i.qty}</span>
           <span class="mono">${peso(i.price*i.qty)}</span>
@@ -1934,7 +2211,6 @@ async function confirmRestock() {
 function renderSalesHistory() {
   const tbody = document.getElementById('sales-tbody');
   const list = [...sales].reverse();
-  const isSuperadmin = currentUser && currentUser.role === 'superadmin';
   tbody.innerHTML = list.map(s => `<tr>
     <td class="mono" style="color:var(--accent)">${s.ref}</td>
     <td style="font-size:12px;color:var(--muted)">${fmt(s.ts)}</td>
@@ -1943,11 +2219,9 @@ function renderSalesHistory() {
     <td style="font-size:12px;color:var(--muted)">${s.cashier||'-'}</td>
     <td class="mono" style="font-weight:600;color:var(--accent2)">${peso(s.total)}</td>
     <td>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-ghost btn-sm" onclick='showReceipt(${JSON.stringify(s)})'>View</button>
-        ${isSuperadmin ? `
-        <button class="btn btn-ghost btn-sm" onclick="openEditSaleModal('${s.ref}')">Edit</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteSale('${s.ref}')">Delete</button>` : ''}
+        ${saleActionButtons(s)}
       </div>
     </td>
   </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No sales recorded yet.</td></tr>';
@@ -1959,6 +2233,29 @@ function exportSalesCSV() {
   });
   downloadCSV(csv, 'sales_export.csv');
 }
+function renderExpensesHistory() {
+  const tbody = document.getElementById('expenses-tbody');
+  if (!tbody) return;
+  const list = [...expenses].reverse();
+  tbody.innerHTML = list.map(e => `<tr>
+    <td class="mono" style="color:var(--danger)">${e.ref}</td>
+    <td style="font-size:12px;color:var(--muted)">${fmt(e.ts)}</td>
+    <td>${e.description}</td>
+    <td><span class="badge ${paymentBadgeClass(e.payment)}">${e.payment}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${e.cashier||'-'}</td>
+    <td class="mono" style="font-weight:600;color:var(--danger)">${peso(e.amount)}</td>
+    <td>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${expenseActionButtons(e)}</div>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No expenses recorded yet.</td></tr>';
+}
+function exportExpensesHistoryCSV() {
+  let csv = 'Ref,Date,Description,Payment,Recorded By,Amount\n';
+  expenses.forEach(e => {
+    csv += `${e.ref},"${fmt(e.ts)}","${e.description}",${e.payment},${e.cashier||''},${e.amount}\n`;
+  });
+  downloadCSV(csv, 'expenses_export.csv');
+}
 function downloadCSV(csv, filename) {
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
@@ -1967,14 +2264,17 @@ function downloadCSV(csv, filename) {
 }
 
 // ============================
-// SALES OVERRIDE (Superadmin only: edit / delete a past sale)
+// SALES OVERRIDE (Admin: edit/delete requires Superadmin approval; Superadmin: direct)
 // ============================
 let editSaleTarget = null;
+let editExpenseTarget = null;
 let editSaleOriginalItems = [];
 let editSaleItems = [];
 
 function openEditSaleModal(ref) {
-  if (!currentUser || currentUser.role !== 'superadmin') return;
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
+  if (pendingApprovalFor(ref)) { alert('This sale already has a pending approval request.'); return; }
   const s = sales.find(x => x.ref === ref);
   if (!s) return;
   editSaleTarget = ref;
@@ -1984,6 +2284,11 @@ function openEditSaleModal(ref) {
   document.getElementById('es-payment').value = s.payment;
   document.getElementById('es-cashier').value = s.cashier || '';
   document.getElementById('edit-sale-error').style.display = 'none';
+  const isSuperadmin = currentUser.role === 'superadmin';
+  document.getElementById('es-warning').textContent = isSuperadmin
+    ? 'Superadmin override: changing quantities will adjust inventory stock to match. This directly rewrites a past transaction — use carefully.'
+    : 'Your changes will be sent to a superadmin for approval before they take effect.';
+  document.getElementById('es-save-btn').textContent = isSuperadmin ? 'Save Changes' : 'Submit for Approval';
   renderEditSaleItems();
   openModal('edit-sale-modal');
 }
@@ -1992,9 +2297,8 @@ function renderEditSaleItems() {
     <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:8px;padding:8px 10px">
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name}</div>
-        ${it.courtRental ? `<div style="font-size:10px;color:var(--muted)">Court ${it.courtRental.court} · ${it.courtRental.name} · ${fmtShortDate(it.courtRental.date)} ${it.courtRental.timeLabel}</div>` : ''}
       </div>
-      <input class="form-control" type="number" min="1" style="width:60px" value="${it.qty}" onchange="updateEditSaleItem(${idx},'qty',this.value)" title="${it.courtRental ? 'Hours' : 'Qty'}">
+      <input class="form-control" type="number" min="1" style="width:60px" value="${it.qty}" onchange="updateEditSaleItem(${idx},'qty',this.value)" title="Qty">
       <input class="form-control" type="number" min="0" step="0.01" style="width:85px" value="${it.price}" onchange="updateEditSaleItem(${idx},'price',this.value)" title="Unit price">
       <div class="mono" style="min-width:72px;text-align:right;font-size:12px">${peso(it.price*it.qty)}</div>
       <button class="btn btn-ghost btn-sm" style="padding:3px 7px;color:var(--danger)" onclick="removeEditSaleItem(${idx})">✕</button>
@@ -2012,7 +2316,8 @@ function removeEditSaleItem(idx) {
   renderEditSaleItems();
 }
 async function saveEditedSale() {
-  if (!currentUser || currentUser.role !== 'superadmin') return;
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
   const err = document.getElementById('edit-sale-error');
   if (editSaleItems.length === 0) {
     err.textContent = 'A sale must have at least one item. Use Delete instead to void the whole sale.';
@@ -2022,6 +2327,30 @@ async function saveEditedSale() {
   const cashier = document.getElementById('es-cashier').value.trim();
   const total = editSaleItems.reduce((a,it) => a + it.qty*it.price, 0);
 
+  if (currentUser.role !== 'superadmin') {
+    // Admin: submit an approval request instead of applying the change directly.
+    const origSale = sales.find(s=>s.ref===editSaleTarget);
+    const reqRef = genApprovalRef();
+    const approval = {
+      ref: reqRef, type: 'edit_sale', targetRef: editSaleTarget,
+      requestedBy: currentUser.name, requestedAt: Date.now(), status: 'pending',
+      reviewedBy: '', reviewedAt: null,
+      originalItems: editSaleOriginalItems, originalPayment: origSale ? origSale.payment : null,
+      originalCashier: origSale ? (origSale.cashier || '') : '', originalTotal: origSale ? origSale.total : 0,
+      proposedItems: editSaleItems, proposedPayment: payment, proposedCashier: cashier, proposedTotal: total,
+    };
+    try {
+      await db.collection('saleApprovals').doc(reqRef).set(approval);
+      closeModal('edit-sale-modal');
+      alert('Edit request submitted. A superadmin must approve it before the sale is updated.');
+    } catch (e) {
+      err.textContent = 'Failed to submit request: ' + e.message;
+      err.style.display = 'block';
+    }
+    return;
+  }
+
+  // Superadmin: apply directly.
   // Reconcile stock: give back the original quantities, then deduct the new ones.
   const deltas = {};
   editSaleOriginalItems.forEach(it => { if (!it.infinite) deltas[it.sku] = (deltas[it.sku]||0) + it.qty; });
@@ -2043,10 +2372,32 @@ async function saveEditedSale() {
   }
 }
 async function deleteSale(ref) {
-  if (!currentUser || currentUser.role !== 'superadmin') return;
-  if (!confirm('Delete this sale? This cannot be undone, and inventory stock will be restored for its items.')) return;
+  const isAdminUp = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+  if (!isAdminUp) return;
+  if (pendingApprovalFor(ref)) { alert('This sale already has a pending approval request.'); return; }
   const s = sales.find(x => x.ref === ref);
   if (!s) return;
+
+  if (currentUser.role !== 'superadmin') {
+    if (!confirm('Submit a request to delete this sale? A superadmin will need to approve it.')) return;
+    const reqRef = genApprovalRef();
+    const approval = {
+      ref: reqRef, type: 'delete_sale', targetRef: ref,
+      requestedBy: currentUser.name, requestedAt: Date.now(), status: 'pending',
+      reviewedBy: '', reviewedAt: null,
+      originalItems: s.items, originalPayment: s.payment, originalCashier: s.cashier || '', originalTotal: s.total,
+      proposedItems: null, proposedPayment: null, proposedCashier: null, proposedTotal: null,
+    };
+    try {
+      await db.collection('saleApprovals').doc(reqRef).set(approval);
+      alert('Delete request submitted. A superadmin must approve it before the sale is removed.');
+    } catch (e) {
+      alert('Failed to submit request: ' + e.message);
+    }
+    return;
+  }
+
+  if (!confirm('Delete this sale? This cannot be undone, and inventory stock will be restored for its items.')) return;
   try {
     const batch = db.batch();
     s.items.forEach(it => {
@@ -2062,9 +2413,129 @@ async function deleteSale(ref) {
 }
 
 // ============================
+// APPROVALS (Superadmin reviews Admin's edit/delete requests)
+// ============================
+function requestTypeLabel(type) {
+  return { edit_sale: 'Edit Sale', delete_sale: 'Delete Sale', edit_expense: 'Edit Expense', delete_expense: 'Delete Expense' }[type] || type;
+}
+function changeSummaryFor(a) {
+  if (a.type === 'delete_sale') {
+    return `Void entire sale — ${peso(a.originalTotal||0)}`;
+  }
+  if (a.type === 'delete_expense') {
+    return `Remove expense "${a.originalDescription||''}" — ${peso(a.originalAmount||0)}`;
+  }
+  if (a.type === 'edit_expense') {
+    const parts = [];
+    if (a.originalDescription !== a.proposedDescription) parts.push(`description: "${a.originalDescription}" → "${a.proposedDescription}"`);
+    if (a.originalAmount !== a.proposedAmount) parts.push(`${peso(a.originalAmount||0)} → ${peso(a.proposedAmount||0)}`);
+    if (a.originalPayment !== a.proposedPayment) parts.push(`payment: ${a.originalPayment} → ${a.proposedPayment}`);
+    return parts.join(', ') || 'no change';
+  }
+  // edit_sale
+  const itemsChanged = JSON.stringify(a.originalItems) !== JSON.stringify(a.proposedItems);
+  const totalDiff = (a.proposedTotal||0) - (a.originalTotal||0);
+  const diffStr = totalDiff === 0 ? 'no change' : (totalDiff > 0 ? `+${peso(totalDiff)}` : `-${peso(Math.abs(totalDiff))}`);
+  return `${peso(a.originalTotal||0)} → ${peso(a.proposedTotal||0)} (${diffStr})${itemsChanged?', items changed':''}${a.originalPayment!==a.proposedPayment?', payment: '+a.originalPayment+' → '+a.proposedPayment:''}`;
+}
+function renderApprovals() {
+  const pending = saleApprovals.filter(a => a.status === 'pending');
+  const resolved = saleApprovals.filter(a => a.status !== 'pending');
+  document.getElementById('approvals-pending-title').textContent = `Pending Requests (${pending.length})`;
+  document.getElementById('approvals-pending-tbody').innerHTML = pending.map(a => `<tr>
+    <td class="mono" style="color:var(--accent)">${a.ref}</td>
+    <td><span class="badge ${a.type.startsWith('delete')?'badge-warn':'badge-blue'}">${requestTypeLabel(a.type)}</span></td>
+    <td class="mono">${a.targetRef}</td>
+    <td style="font-size:12px;color:var(--muted)">${a.requestedBy||'-'}</td>
+    <td style="font-size:12px;color:var(--muted)">${fmt(a.requestedAt)}</td>
+    <td style="font-size:12px;max-width:260px">${changeSummaryFor(a)}</td>
+    <td>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-success btn-sm" onclick="approveRequest('${a.ref}')">Approve</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="rejectRequest('${a.ref}')">Reject</button>
+      </div>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No pending requests.</td></tr>';
+
+  document.getElementById('approvals-resolved-tbody').innerHTML = resolved.map(a => `<tr>
+    <td class="mono" style="color:var(--accent)">${a.ref}</td>
+    <td><span class="badge ${a.type.startsWith('delete')?'badge-warn':'badge-blue'}">${requestTypeLabel(a.type)}</span></td>
+    <td class="mono">${a.targetRef}</td>
+    <td style="font-size:12px;color:var(--muted)">${a.requestedBy||'-'}</td>
+    <td><span class="badge ${a.status==='approved'?'badge-blue':'badge-gray'}">${a.status}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${a.reviewedBy||'-'}</td>
+    <td style="font-size:12px;color:var(--muted)">${a.reviewedAt?fmt(a.reviewedAt):'-'}</td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No resolved requests yet.</td></tr>';
+}
+async function approveRequest(ref) {
+  if (!currentUser || currentUser.role !== 'superadmin') return;
+  const a = saleApprovals.find(x => x.ref === ref && x.status === 'pending');
+  if (!a) return;
+
+  if (a.type === 'edit_sale' || a.type === 'delete_sale') {
+    const s = sales.find(x => x.ref === a.targetRef);
+    if (!s) { alert('The original sale no longer exists.'); return; }
+    if (!confirm(`Approve this ${requestTypeLabel(a.type).toLowerCase()} request for ${a.targetRef}?`)) return;
+    try {
+      const batch = db.batch();
+      if (a.type === 'delete_sale') {
+        s.items.forEach(it => {
+          if (!it.infinite && products.find(p => p.sku === it.sku)) {
+            batch.update(db.collection('products').doc(it.sku), { stock: firebase.firestore.FieldValue.increment(it.qty) });
+          }
+        });
+        batch.delete(db.collection('sales').doc(a.targetRef));
+      } else {
+        const deltas = {};
+        a.originalItems.forEach(it => { if (!it.infinite) deltas[it.sku] = (deltas[it.sku]||0) + it.qty; });
+        a.proposedItems.forEach(it => { if (!it.infinite) deltas[it.sku] = (deltas[it.sku]||0) - it.qty; });
+        Object.entries(deltas).forEach(([sku, delta]) => {
+          if (delta !== 0 && products.find(p => p.sku === sku)) {
+            batch.update(db.collection('products').doc(sku), { stock: firebase.firestore.FieldValue.increment(delta) });
+          }
+        });
+        batch.update(db.collection('sales').doc(a.targetRef), { items: a.proposedItems, payment: a.proposedPayment, cashier: a.proposedCashier, total: a.proposedTotal });
+      }
+      batch.update(db.collection('saleApprovals').doc(ref), { status: 'approved', reviewedBy: currentUser.name, reviewedAt: Date.now() });
+      await batch.commit();
+    } catch (e) {
+      alert('Failed to approve request: ' + e.message);
+    }
+    return;
+  }
+
+  // edit_expense / delete_expense
+  const ex = expenses.find(x => x.ref === a.targetRef);
+  if (!ex) { alert('The original expense no longer exists.'); return; }
+  if (!confirm(`Approve this ${requestTypeLabel(a.type).toLowerCase()} request for ${a.targetRef}?`)) return;
+  try {
+    const batch = db.batch();
+    if (a.type === 'delete_expense') {
+      batch.delete(db.collection('expenses').doc(a.targetRef));
+    } else {
+      batch.update(db.collection('expenses').doc(a.targetRef), { description: a.proposedDescription, amount: a.proposedAmount, payment: a.proposedPayment, cashier: a.proposedCashier });
+    }
+    batch.update(db.collection('saleApprovals').doc(ref), { status: 'approved', reviewedBy: currentUser.name, reviewedAt: Date.now() });
+    await batch.commit();
+  } catch (e) {
+    alert('Failed to approve request: ' + e.message);
+  }
+}
+async function rejectRequest(ref) {
+  if (!currentUser || currentUser.role !== 'superadmin') return;
+  if (!confirm('Reject this request? No changes will be made.')) return;
+  try {
+    await db.collection('saleApprovals').doc(ref).update({ status: 'rejected', reviewedBy: currentUser.name, reviewedAt: Date.now() });
+  } catch (e) {
+    alert('Failed to reject request: ' + e.message);
+  }
+}
+
+// ============================
 // REPORTS — helpers
 // ============================
-function computeSummary(list) {
+function computeSummary(list, expList) {
+  expList = expList || [];
   const revenue = list.reduce((a,s)=>a+s.total,0);
   const cogs = list.reduce((a,s)=>a+s.items.reduce((b,i)=>{
     const p=products.find(x=>x.sku===i.sku); return b+(p?p.cost:0)*i.qty;},0),0);
@@ -2074,7 +2545,9 @@ function computeSummary(list) {
   const pMap = {};
   list.forEach(s=>s.items.forEach(i=>{ if(!pMap[i.sku]) pMap[i.sku]={name:i.name,qty:0,rev:0}; pMap[i.sku].qty+=i.qty; pMap[i.sku].rev+=i.price*i.qty; }));
   const top = Object.values(pMap).sort((a,b)=>b.rev-a.rev).slice(0,8);
-  return { revenue, cogs, gross, count:list.length, cash, online, top };
+  const expenseTotal = expList.reduce((a,e)=>a+e.amount,0);
+  const netProfit = gross - expenseTotal;
+  return { revenue, cogs, gross, count:list.length, cash, online, top, expenseTotal, expenseCount: expList.length, netProfit };
 }
 function emptyRow(cols, msg) {
   return `<tr><td colspan="${cols}" style="text-align:center;color:var(--muted);padding:16px">${msg||'No data for this period.'}</td></tr>`;
@@ -2084,13 +2557,15 @@ function emptyRow(cols, msg) {
 // REPORTS — overview (all-time)
 // ============================
 function renderReports() {
-  const sum = computeSummary(sales);
+  const sum = computeSummary(sales, expenses);
   const totalInvVal = products.reduce((a,p)=>a+(p.infinite?0:p.stock*p.cost),0);
 
   document.getElementById('report-kpis').innerHTML = `
     <div class="kpi-card green"><div class="kpi-label">Total Revenue</div><div class="kpi-value" style="font-size:18px">${peso(sum.revenue)}</div><div class="kpi-sub">${sum.count} transactions</div></div>
     <div class="kpi-card"><div class="kpi-label">Total COGS</div><div class="kpi-value" style="font-size:18px">${peso(sum.cogs)}</div></div>
     <div class="kpi-card green"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div><div class="kpi-sub">${sum.revenue>0?(sum.gross/sum.revenue*100).toFixed(1)+'% margin':'-'}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Total Expenses</div><div class="kpi-value" style="font-size:18px">${peso(sum.expenseTotal)}</div><div class="kpi-sub">${sum.expenseCount} entr${sum.expenseCount!==1?'ies':'y'}</div></div>
+    <div class="kpi-card ${sum.netProfit>=0?'green':'red'}"><div class="kpi-label">Net Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.netProfit)}</div><div class="kpi-sub">gross profit minus expenses</div></div>
     <div class="kpi-card warn"><div class="kpi-label">Inventory Value</div><div class="kpi-value" style="font-size:18px">${peso(totalInvVal)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Cash Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.cash)}</div><div class="kpi-sub">${sum.revenue>0?(sum.cash/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>
     <div class="kpi-card"><div class="kpi-label">Online Payments</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div><div class="kpi-sub">${sum.revenue>0?(sum.online/sum.revenue*100).toFixed(1)+'% of revenue':'-'}</div></div>`;
@@ -2126,13 +2601,16 @@ function renderDailyReport() {
   const start = new Date(y, m-1, d).getTime();
   const end = start + 86400000;
   const list = sales.filter(s => s.ts >= start && s.ts < end);
-  const sum = computeSummary(list);
+  const expList = expenses.filter(e => e.ts >= start && e.ts < end);
+  const sum = computeSummary(list, expList);
 
   document.getElementById('daily-kpis').innerHTML = `
     <div class="kpi-card green"><div class="kpi-label">Total Sales</div><div class="kpi-value" style="font-size:18px">${peso(sum.revenue)}</div><div class="kpi-sub">${sum.count} transaction${sum.count!==1?'s':''}</div></div>
     <div class="kpi-card"><div class="kpi-label">Cash</div><div class="kpi-value" style="font-size:18px">${peso(sum.cash)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Online</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div></div>
-    <div class="kpi-card warn"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div></div>`;
+    <div class="kpi-card warn"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Expenses</div><div class="kpi-value" style="font-size:18px">${peso(sum.expenseTotal)}</div><div class="kpi-sub">${sum.expenseCount} entr${sum.expenseCount!==1?'ies':'y'}</div></div>
+    <div class="kpi-card ${sum.netProfit>=0?'green':'red'}"><div class="kpi-label">Net Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.netProfit)}</div></div>`;
 
   document.getElementById('daily-tbody').innerHTML = list.map(s => `<tr>
     <td class="mono" style="color:var(--accent)">${s.ref}</td>
@@ -2143,6 +2621,15 @@ function renderDailyReport() {
     <td style="font-size:12px;color:var(--muted)">${s.cashier||'-'}</td>
     <td class="mono" style="font-weight:600;color:var(--accent2)">${peso(s.total)}</td>
   </tr>`).join('') || emptyRow(7,'No sales on this date.');
+
+  document.getElementById('daily-expenses-tbody').innerHTML = expList.map(e => `<tr>
+    <td class="mono" style="color:var(--danger)">${e.ref}</td>
+    <td style="font-size:12px;color:var(--muted)">${new Date(e.ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</td>
+    <td style="font-size:12px">${e.description}</td>
+    <td><span class="badge ${paymentBadgeClass(e.payment)}">${e.payment}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${e.cashier||'-'}</td>
+    <td class="mono" style="font-weight:600;color:var(--danger)">${peso(e.amount)}</td>
+  </tr>`).join('') || emptyRow(6,'No expenses on this date.');
 }
 function exportDailyCSV() {
   const dateInput = document.getElementById('daily-date');
@@ -2155,6 +2642,18 @@ function exportDailyCSV() {
     csv += `${s.ref},"${new Date(s.ts).toLocaleTimeString('en-PH')}","${s.items.map(itemSummary).join('; ')}","${s.items.map(i=>i.price).join('; ')}",${s.payment},${s.cashier||''},${s.total}\n`;
   });
   downloadCSV(csv, `daily_report_${dateInput.value}.csv`);
+}
+function exportDailyExpensesCSV() {
+  const dateInput = document.getElementById('daily-date');
+  const [y,m,d] = dateInput.value.split('-').map(Number);
+  const start = new Date(y, m-1, d).getTime();
+  const end = start + 86400000;
+  const list = expenses.filter(e => e.ts >= start && e.ts < end);
+  let csv = 'Ref,Time,Description,Payment,Recorded By,Amount\n';
+  list.forEach(e => {
+    csv += `${e.ref},"${new Date(e.ts).toLocaleTimeString('en-PH')}","${e.description}",${e.payment},${e.cashier||''},${e.amount}\n`;
+  });
+  downloadCSV(csv, `daily_expenses_${dateInput.value}.csv`);
 }
 
 // ============================
@@ -2235,19 +2734,31 @@ function getSummaryRange() {
 function renderSummaryReport() {
   const [start,end] = getSummaryRange();
   const list = sales.filter(s => s.ts >= start && s.ts < end);
-  const sum = computeSummary(list);
+  const expList = expenses.filter(e => e.ts >= start && e.ts < end);
+  const sum = computeSummary(list, expList);
 
   document.getElementById('summary-kpis').innerHTML = `
     <div class="kpi-card green"><div class="kpi-label">Revenue</div><div class="kpi-value" style="font-size:18px">${peso(sum.revenue)}</div><div class="kpi-sub">${sum.count} transaction${sum.count!==1?'s':''}</div></div>
     <div class="kpi-card"><div class="kpi-label">Gross Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.gross)}</div><div class="kpi-sub">${sum.revenue>0?(sum.gross/sum.revenue*100).toFixed(1)+'% margin':'-'}</div></div>
     <div class="kpi-card"><div class="kpi-label">Cash Sales</div><div class="kpi-value" style="font-size:18px">${peso(sum.cash)}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Online Sales</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div></div>`;
+    <div class="kpi-card"><div class="kpi-label">Online Sales</div><div class="kpi-value" style="font-size:18px">${peso(sum.online)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Expenses</div><div class="kpi-value" style="font-size:18px">${peso(sum.expenseTotal)}</div><div class="kpi-sub">${sum.expenseCount} entr${sum.expenseCount!==1?'ies':'y'}</div></div>
+    <div class="kpi-card ${sum.netProfit>=0?'green':'red'}"><div class="kpi-label">Net Profit</div><div class="kpi-value" style="font-size:18px">${peso(sum.netProfit)}</div></div>`;
 
   document.getElementById('summary-top-tbody').innerHTML = sum.top.map(t => `<tr><td style="font-weight:500">${t.name}</td><td class="mono">${t.qty}</td><td class="mono" style="color:var(--accent2)">${peso(t.rev)}</td></tr>`).join('') || emptyRow(3);
 
   document.getElementById('summary-payment-tbody').innerHTML = `
     <tr><td><span class="badge badge-gray">Cash</span></td><td class="mono">${list.filter(s=>s.payment==='Cash').length}</td><td class="mono">${peso(sum.cash)}</td></tr>
     <tr><td><span class="badge badge-blue">Online</span></td><td class="mono">${list.filter(s=>s.payment==='Online').length}</td><td class="mono">${peso(sum.online)}</td></tr>`;
+
+  document.getElementById('summary-expenses-tbody').innerHTML = expList.map(e => `<tr>
+    <td class="mono" style="color:var(--danger)">${e.ref}</td>
+    <td style="font-size:12px;color:var(--muted)">${fmt(e.ts)}</td>
+    <td style="font-size:12px">${e.description}</td>
+    <td><span class="badge ${paymentBadgeClass(e.payment)}">${e.payment}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${e.cashier||'-'}</td>
+    <td class="mono" style="font-weight:600;color:var(--danger)">${peso(e.amount)}</td>
+  </tr>`).join('') || emptyRow(6,'No expenses in this period.');
 }
 function exportSummaryCSV() {
   const [start,end] = getSummaryRange();
@@ -2257,6 +2768,15 @@ function exportSummaryCSV() {
     csv += `${s.ref},"${fmt(s.ts)}","${s.items.map(itemSummary).join('; ')}",${s.payment},${s.cashier||''},${s.total}\n`;
   });
   downloadCSV(csv, `summary_report_${summaryPeriod}.csv`);
+}
+function exportSummaryExpensesCSV() {
+  const [start,end] = getSummaryRange();
+  const list = expenses.filter(e => e.ts >= start && e.ts < end);
+  let csv = 'Ref,Date,Description,Payment,Recorded By,Amount\n';
+  list.forEach(e => {
+    csv += `${e.ref},"${fmt(e.ts)}","${e.description}",${e.payment},${e.cashier||''},${e.amount}\n`;
+  });
+  downloadCSV(csv, `summary_expenses_${summaryPeriod}.csv`);
 }
 
 // ============================
