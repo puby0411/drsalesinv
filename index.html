@@ -321,6 +321,9 @@ function computePay(role, punches, sh){
   return {lines, dayRows, days, hrs, dayRate, hourly, otRate, regFull, shortM, deduction, regPay, otM, otPay,
     gross:round2(regPay+otPay), openCount: lines.filter(l=>l.mins==null).length, otMin, deduct};
 }
+/* payslip adjustments: amounts are typed as plain numbers; the type sets the sign */
+const adjVal = a => { const v=Math.abs(+a.amount||0); return a.kind==="add" ? v : -v; };
+const adjTotals = list => { let ded=0, add=0; for(const a of list){ const v=adjVal(a); if(v<0) ded+=v; else add+=v; } return {ded:round2(ded), add:round2(add), net:round2(ded+add)}; };
 const LEAVE_TYPES = ["Vacation","Sick","Emergency","Maternity / Paternity","Bereavement","Other"];
 const dayCount = (a,b) => Math.round((parseDay(b)-parseDay(a))/86400000)+1;
 const leaveDays = l => l.half ? 0.5 : dayCount(l.from,l.to);
@@ -684,7 +687,7 @@ function viewPayslips(){
     else {
       const sh=shiftOf(st), c=computePay(role, sl.punches, sh), lv=leaveSummary(st.id, role, sl.from, sl.to);
       const gross = round2(c.gross + lv.pay);
-      const adjTotal = round2(sl.adj.reduce((a,x)=>a+(+x.amount||0),0));
+      const at = adjTotals(sl.adj), adjTotal = at.net;
       const net = round2(gross + adjTotal);
       preview = `<article class="slip">
         <div class="slip-head"><div><span class="eyebrow">${esc(S.settings.company||"")}</span><h2>Payslip</h2></div>
@@ -710,9 +713,13 @@ function viewPayslips(){
         <div class="panel" style="padding:14px;gap:10px;background:var(--sunk)">
           <div class="hrow"><h3>Adjustments</h3><button class="btn sm" data-act="add-adj">Add line</button></div>
           ${sl.adj.length?sl.adj.map((a,i)=>`<div class="row">
-            <div class="field"><label for="adj-l-${i}">Description</label><input id="adj-l-${i}" data-adj="${i}" data-f="label" value="${esc(a.label)}" placeholder="e.g. SSS contribution, Meal allowance"></div>
-            <div class="field sm"><label for="adj-a-${i}">Amount (− to deduct)</label><input id="adj-a-${i}" data-adj="${i}" data-f="amount" type="number" step="0.01" value="${esc(a.amount)}"></div>
-            <button class="btn ghost sm" data-act="del-adj" data-i="${i}">Remove</button></div>`).join(""):`<span class="muted" style="font-size:.85rem">Add allowances as positive amounts and deductions (SSS, PhilHealth, Pag-IBIG, cash advance) as negative amounts.</span>`}
+            <div class="field sm"><label for="adj-k-${i}">Type</label><select id="adj-k-${i}" data-adj="${i}" data-f="kind"><option value="ded" ${a.kind!=="add"?"selected":""}>Deduction</option><option value="add" ${a.kind==="add"?"selected":""}>Addition</option></select></div>
+            <div class="field"><label for="adj-l-${i}">Description</label><input id="adj-l-${i}" data-adj="${i}" data-f="label" value="${esc(a.label)}" placeholder="${a.kind==="add"?"e.g. Meal allowance, Incentive":"e.g. SSS, PhilHealth, Pag-IBIG, Cash advance"}"></div>
+            <div class="field sm"><label for="adj-a-${i}">Amount</label><input id="adj-a-${i}" data-adj="${i}" data-f="amount" type="number" min="0" step="0.01" value="${esc(a.amount)}"></div>
+            <b class="num ${adjVal(a)<0?"ot-mark":""}" style="align-self:center;min-width:110px;text-align:right">${adjVal(a)<0?"−"+money(-adjVal(a)):money(adjVal(a))}</b>
+            <button class="btn ghost sm" data-act="del-adj" data-i="${i}">Remove</button></div>`).join("")
+            + `<div class="hrow" style="font-size:.88rem"><span class="muted">Total deductions <b class="num ot-mark">−${money(-at.ded)}</b></span><span class="muted">Total additions <b class="num">${money(at.add)}</b></span></div>`
+          :`<span class="muted" style="font-size:.85rem">Add deductions (SSS, PhilHealth, Pag-IBIG, cash advance) or additions (allowances, incentives). Type the amount as a normal number. Deductions are subtracted automatically.</span>`}
         </div>
         <div class="net"><span class="eyebrow" style="color:var(--accent)">Net pay</span><b>${money(net)}</b></div>
         ${c.openCount?`<div class="note">${c.openCount} punch${c.openCount>1?"es are":" is"} still open in this period and not counted. Close ${c.openCount>1?"them":"it"} on the Records tab.</div>`:""}
@@ -1081,7 +1088,7 @@ document.addEventListener("click", async e=>{
         sl.punches=snap.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.staffId===sl.staffId);
       }catch(err){ toast("Couldn't load punches for this period.",true); }
       sl.loading=false; render(); break; }
-    case "add-adj": S.slip.adj.push({label:"",amount:""}); render(); break;
+    case "add-adj": S.slip.adj.push({kind:"ded", label:"", amount:""}); render(); break;
     case "del-adj": S.slip.adj.splice(+b.dataset.i,1); render(); break;
     case "pdf": makePdf(); break;
 
@@ -1220,7 +1227,7 @@ async function makePdf(){
   if(!window.jspdf?.jsPDF){ toast("The PDF tool didn't load. Reload the page and try again.",true); return; }
   const sh=shiftOf(st), c=computePay(role, sl.punches, sh), lv=leaveSummary(st.id, role, sl.from, sl.to), gross=round2(c.gross+lv.pay);
   const adj=sl.adj.filter(a=>a.label||+a.amount);
-  const adjTotal=round2(adj.reduce((a,x)=>a+(+x.amount||0),0)), net=round2(gross+adjTotal);
+  const at=adjTotals(adj), adjTotal=at.net, net=round2(gross+adjTotal);
   const doc=new window.jspdf.jsPDF({unit:"pt", format:"a4"});
   const clean=s=>String(s).replace(/[   ]/g," ").replace(/[–—]/g,"-");
   const _text=doc.text.bind(doc); doc.text=(s,...a)=>_text(Array.isArray(s)?s.map(clean):clean(s),...a);
@@ -1243,7 +1250,9 @@ async function makePdf(){
     [`Overtime pay (${role.otMode==="fixed"?"fixed rate":(+role.otValue||0)+"x hourly"})`, hdec(c.otM)+" hrs", plainMoney(c.otRate)+" / hr", plainMoney(c.otPay)],
     ...(lv.paid?[["Paid leave", `${lv.paid} day${lv.paid===1?"":"s"}`, plainMoney(lv.dayRate)+" / day", plainMoney(lv.pay)]]:[]),
     [{content:"Gross pay",styles:{fontStyle:"bold"}}, "", "", {content:plainMoney(gross),styles:{fontStyle:"bold"}}],
-    ...adj.map(a=>[a.label||"Adjustment","","",plainMoney(+a.amount||0)])
+    ...adj.filter(a=>adjVal(a)>0).map(a=>["Add: "+(a.label||"Addition"),"","",plainMoney(adjVal(a))]),
+    ...adj.filter(a=>adjVal(a)<0).map(a=>["Less: "+(a.label||"Deduction"),"","",{content:"-"+plainMoney(-adjVal(a)),styles:{textColor:[179,38,30]}}]),
+    ...(at.ded?[[{content:"Total deductions",styles:{fontStyle:"bold"}},"","",{content:"-"+plainMoney(-at.ded),styles:{fontStyle:"bold",textColor:[179,38,30]}}]]:[])
   ];
   doc.autoTable({startY:146, margin:{left:M,right:M}, head:[["Earnings & adjustments","Qty","Rate","Amount"]], body:earnRows, theme:"grid", headStyles:head, styles:{fontSize:9, textColor:ink, lineColor:[211,219,215], lineWidth:.5, cellPadding:5}, columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"}}});
   let y=doc.lastAutoTable.finalY+14;
