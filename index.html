@@ -481,12 +481,13 @@ function viewLogin(){
       <p class="muted" style="margin:0;font-size:.85rem">Ask an admin for a device code. They create one in Settings → Approved devices.</p>
       <div class="row">
         <div class="field sm"><label for="pc-code">Device code</label><input id="pc-code" data-k="pc-code" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(D("pc-code"))}"></div>
-        <div class="field"><label for="pc-name">Name this device</label><input id="pc-name" data-k="pc-name" value="${esc(D("pc-name",guessDeviceName()))}"></div>
+        <div class="field"><label for="pc-name">Name this device</label><input id="pc-name" data-k="pc-name" maxlength="40" value="${esc(D("pc-name",uniqueDeviceName()))}"></div>
       </div>
       ${S.err.pair?`<div class="err">${esc(S.err.pair)}</div>`:""}
       <div><button class="btn" data-act="pair-device">Approve this device</button></div>
     </div>`:""}
     <p class="muted" style="text-align:center;font-size:.82rem">Forgot your PIN? Ask an admin to reset it.</p>
+    ${DEVICE_ID?`<p class="muted" style="text-align:center;font-size:.78rem;margin:0">Device ID <span class="mono" style="letter-spacing:.08em">${shortId(DEVICE_ID)}</span>${thisDevice()?` · ${esc(thisDevice().name)}`:" · not approved"}</p>`:""}
   </div>`;
 }
 
@@ -872,6 +873,22 @@ function viewLocation(){
   </section>`;
 }
 
+const shortId = id => String(id||"").slice(-6).toUpperCase();
+const normName = s => String(s||"").trim().replace(/\s+/g," ").toLowerCase();
+const nameTaken = (name, exceptId) => S.devices.some(d => d.id!==exceptId && normName(d.name)===normName(name));
+function uniqueDeviceName(base){
+  base = base || guessDeviceName();
+  if(!nameTaken(base, DEVICE_ID)) return base;
+  for(let n=2;n<100;n++){ const t=`${base} ${n}`; if(!nameTaken(t, DEVICE_ID)) return t; }
+  return base;
+}
+function checkDeviceName(name, exceptId){
+  if(!name) return "Give the device a name.";
+  if(name.length>40) return "Keep the device name to 40 characters or fewer.";
+  const dup=S.devices.find(d=>d.id!==exceptId && normName(d.name)===normName(name));
+  if(dup) return `Another device is already called "${dup.name}". Pick a different name, like "Front desk tablet" or "Canteen phone".`;
+  return null;
+}
 function viewDevices(){
   const cur=thisDevice(), lock=!!S.settings.deviceLock;
   return `<section class="panel" style="max-width:760px">
@@ -879,9 +896,11 @@ function viewDevices(){
     <p class="muted" style="margin:0;font-size:.88rem">When the lock is on, time in and time out only work on the devices listed here. Admins can still sign in anywhere to manage records, but can't punch from an unapproved device.</p>
     <div class="panel" style="padding:14px;gap:10px;background:var(--sunk)">
       <div class="hrow"><h3>This device</h3>${cur?'<span class="chip in">Approved</span>':'<span class="chip">Not approved</span>'}</div>
+      ${DEVICE_ID?`<span class="muted" style="font-size:.85rem">Device ID <b class="mono" style="letter-spacing:.08em;color:var(--ink)" title="${esc(DEVICE_ID)}">${shortId(DEVICE_ID)}</b>. Each device gets its own random ID. It's what the lock checks, not the name.</span>`:""}
       ${!DEVICE_ID?`<div class="note">This browser blocks site storage, so it can't be recognised as an approved device. Allow site data for this page, or use another browser.</div>`
-        : cur?`<span class="muted" style="font-size:.88rem">Approved as <b>${esc(cur.name)}</b>.</span>`
-        : `<div class="row"><div class="field"><label for="dv-name">Device name</label><input id="dv-name" data-k="dv-name" value="${esc(D("dv-name",guessDeviceName()))}" placeholder="e.g. Front desk tablet"></div>
+        : cur?`<div class="row"><div class="field"><label for="dvr-self">Device name</label><input id="dvr-self" data-k="dvr-self" maxlength="40" value="${esc(D("dvr-self",cur.name))}"></div>
+           <button class="btn" data-act="rename-device" data-id="${esc(cur.id)}" data-k2="dvr-self">Save name</button></div>`
+        : `<div class="row"><div class="field"><label for="dv-name">Device name</label><input id="dv-name" data-k="dv-name" maxlength="40" value="${esc(D("dv-name",uniqueDeviceName()))}" placeholder="e.g. Front desk tablet"></div>
            <button class="btn primary" data-act="approve-device">Approve this device</button></div>`}
     </div>
     <div class="panel" style="padding:14px;gap:10px;background:var(--sunk)">
@@ -892,11 +911,15 @@ function viewDevices(){
     </div>
     ${S.devices.length?`<div class="tbl"><table><thead><tr><th>Device</th><th>Approved</th><th>By</th><th></th></tr></thead><tbody>
       ${S.devices.map(d=>{ const conf=S.confirm==="del-device:"+d.id;
-        return `<tr><td><b>${esc(d.name)}</b>${d.id===DEVICE_ID?' <span class="muted">(this device)</span>':""}</td><td>${d.created?esc(fmtLong(d.created)):"—"}</td><td>${esc(d.by?staffName(d.by):"—")}</td>
+        if(S.editDevice===d.id) return `<tr><td colspan="4"><div class="row">
+          <div class="field"><label for="dvr-row">Device name</label><input id="dvr-row" data-k="dvr-row" maxlength="40" value="${esc(D("dvr-row",d.name))}"></div>
+          <button class="btn primary sm" data-act="rename-device" data-id="${esc(d.id)}" data-k2="dvr-row">Save</button><button class="btn ghost sm" data-act="cancel-rename">Cancel</button></div></td></tr>`;
+        return `<tr><td><b>${esc(d.name)}</b>${d.id===DEVICE_ID?' <span class="muted">(this device)</span>':""}<div class="mono muted" style="font-size:.78rem;letter-spacing:.08em" title="${esc(d.id)}">ID ${shortId(d.id)}</div></td><td>${d.created?esc(fmtLong(d.created)):"—"}</td><td>${esc(d.by?staffName(d.by):"—")}</td>
         <td class="r">${conf?`<span class="inline-confirm">Remove access? <button class="btn danger sm" data-act="del-device" data-id="${esc(d.id)}">Remove</button><button class="btn ghost sm" data-act="cancel-confirm">Keep</button></span>`
-          :`<button class="btn ghost sm" data-act="ask" data-v="del-device:${esc(d.id)}">Remove</button>`}</td></tr>`;}).join("")}
+          :`<button class="btn ghost sm" data-act="edit-device" data-id="${esc(d.id)}">Rename</button><button class="btn ghost sm" data-act="ask" data-v="del-device:${esc(d.id)}">Remove</button>`}</td></tr>`;}).join("")}
     </tbody></table></div>`:`<div class="empty">No devices approved yet. Open this page on the time clock tablet or computer, sign in as admin, and approve it here.</div>`}
     <label class="check"><input type="checkbox" id="st-lock" data-k="st-lock" ${D("st-lock",lock)?"checked":""}> Only allow time in/out on approved devices</label>
+    ${S.err.dev?`<div class="err">${esc(S.err.dev)}</div>`:""}
     ${S.err.lock?`<div class="err">${esc(S.err.lock)}</div>`:""}
     <div><button class="btn primary" data-act="save-lock">Save device lock</button></div>
   </section>`;
@@ -1119,8 +1142,18 @@ document.addEventListener("click", async e=>{
       break; }
     case "approve-device": {
       if(!DEVICE_ID) return;
-      const name=String(D("dv-name",guessDeviceName())).trim()||guessDeviceName();
-      await run(async()=>{ await S.db.doc("devices/"+DEVICE_ID).set({name, created:Date.now(), by:S.meId}); clearDrafts("dv-"); toast(`${name} approved`); });
+      const name=String(D("dv-name",uniqueDeviceName())).trim().replace(/\s+/g," ");
+      const bad=checkDeviceName(name, DEVICE_ID); if(bad){ S.err.dev=bad; render(); return; }
+      await run(async()=>{ await S.db.doc("devices/"+DEVICE_ID).set({name, created:Date.now(), by:S.meId}); clearDrafts("dv-"); S.err.dev=null; toast(`${name} approved`); });
+      break; }
+    case "edit-device": S.editDevice=id; delete S.drafts["dvr-row"]; S.err.dev=null; render(); break;
+    case "cancel-rename": S.editDevice=null; delete S.drafts["dvr-row"]; S.err.dev=null; render(); break;
+    case "rename-device": {
+      const d=S.devices.find(x=>x.id===id); if(!d) return;
+      const key=b.dataset.k2, name=String(D(key,d.name)).trim().replace(/\s+/g," ");
+      if(name===d.name){ S.editDevice=null; delete S.drafts[key]; render(); return; }
+      const bad=checkDeviceName(name, id); if(bad){ S.err.dev=bad; render(); return; }
+      await run(async()=>{ await S.db.doc("devices/"+id).update({name, renamed:Date.now()}); delete S.drafts[key]; S.editDevice=null; S.err.dev=null; toast(`Renamed to ${name}`); },"dev");
       break; }
     case "show-pair": S.showPair=true; render(); break;
     case "make-code": {
@@ -1136,7 +1169,8 @@ document.addEventListener("click", async e=>{
       break;
     case "pair-device": {
       if(!DEVICE_ID) return;
-      const code=String(D("pc-code")).trim(), name=String(D("pc-name",guessDeviceName())).trim()||guessDeviceName();
+      const code=String(D("pc-code")).trim(), name=String(D("pc-name",uniqueDeviceName())).trim().replace(/\s+/g," ");
+      const badName=checkDeviceName(name, DEVICE_ID); if(badName){ S.err.pair=badName; render(); return; }
       if(!/^\d{6}$/.test(code)){ S.err.pair="Enter the 6-digit code from an admin."; render(); return; }
       await run(async()=>{
         const snap=await S.db.doc("devcodes/"+code).get();
