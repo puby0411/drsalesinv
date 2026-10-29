@@ -213,6 +213,18 @@ function guessDeviceName(){
 const me = () => S.staff.find(s => s.id === S.meId) || null;
 const roleOf = st => S.roles.find(r => r.id === st?.roleId) || null;
 const staffName = id => S.staff.find(s => s.id === id)?.name || "Removed staff";
+/* access levels: staff < admin (no Settings) < global admin (everything).
+   Older data has no global flag yet: then the first admin created is the global admin. */
+function isGlobal(st){
+  if(!st?.isAdmin) return false;
+  if(S.staff.some(x=>x.isGlobal)) return !!st.isGlobal;
+  const first=S.staff.filter(x=>x.isAdmin).sort((a,b)=>(a.created||0)-(b.created||0))[0];
+  return first?.id===st.id;
+}
+const accessOf = st => isGlobal(st) ? "global" : st?.isAdmin ? "admin" : "staff";
+const ACCESS_LABEL = {staff:"Staff", admin:"Admin", global:"Global admin"};
+const accessChip = st => { const a=accessOf(st); return a==="staff" ? '<span class="chip">Staff</span>' : `<span class="chip in">${ACCESS_LABEL[a]}</span>`; };
+const accessSelect = (id, cur) => `<div class="field sm"><label for="${id}">Access</label><select id="${id}" data-k="${id}">${["staff","admin","global"].map(a=>`<option value="${a}" ${cur===a?"selected":""}>${ACCESS_LABEL[a]}</option>`).join("")}</select></div>`;
 const D = (k, def="") => (k in S.drafts) ? S.drafts[k] : def;
 const clearDrafts = prefix => { for(const k of Object.keys(S.drafts)) if(k.startsWith(prefix)) delete S.drafts[k]; };
 
@@ -362,6 +374,8 @@ function afterLoad(){
   if(S.status==="loading") S.status="ready";
   const m = me();
   if(S.meId && (!m || m.active===false)){ logout(); return; }
+  if(m && m.isAdmin && !S.staff.some(x=>x.isGlobal) && isGlobal(m)) S.db.doc("staff/"+m.id).update({isGlobal:true}).catch(()=>{});
+  if(m && S.tab==="settings" && !isGlobal(m)) S.tab="clock";
   startSubs();
   render();
 }
@@ -433,7 +447,7 @@ function brandBar(){
   const m=me();
   return `<div class="bar">
     <div class="brand"><span class="eyebrow">Time clock</span><b>${esc(S.settings.company || "Punch Clock")}</b></div>
-    ${m ? `<div class="who"><span class="chip">${esc(m.name)}${m.isAdmin?" · Admin":""}</span><button class="btn ghost sm" data-act="logout">Sign out</button></div>`:""}
+    ${m ? `<div class="who"><span class="chip">${esc(m.name)}${m.isAdmin?" · "+ACCESS_LABEL[accessOf(m)]:""}</span><button class="btn ghost sm" data-act="logout">Sign out</button></div>`:""}
   </div>`;
 }
 
@@ -493,7 +507,7 @@ function viewLogin(){
 
 function tabsBar(){
   const m=me(); if(!m?.isAdmin) return "";
-  const t=[["clock","My clock"],["today","Today"],["records","Records"],["leave","Leave"],["payslips","Payslips"],["staff","Staff"],["roles","Roles & pay"],["settings","Settings"]];
+  const t=[["clock","My clock"],["today","Today"],["records","Records"],["leave","Leave"],["payslips","Payslips"],["staff","Staff"],["roles","Roles & pay"],...(isGlobal(m)?[["settings","Settings"]]:[])];
   return `<nav class="tabs" role="tablist">${t.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-v="${k}">${l}</button>`).join("")}</nav>`;
 }
 
@@ -514,7 +528,7 @@ function viewClock(){
       ${open ? `<div class="stamp in">IN ${esc(fmtTime(open.in))}</div>` : `<div class="stamp out">OFF THE CLOCK</div>`}
     </div>
     <div class="punch">
-      ${!deviceOk() ? `<div class="note"><b>Not an approved device.</b> Time in and time out are turned off here. ${m.isAdmin?"You can approve this device in Settings.":"Use one of the approved time clock devices."}</div>` : open
+      ${!deviceOk() ? `<div class="note"><b>Not an approved device.</b> Time in and time out are turned off here. ${isGlobal(m)?"You can approve this device in Settings.":m.isAdmin?"Ask a global admin to approve this device.":"Use one of the approved time clock devices."}</div>` : open
         ? `<button class="punchbtn out" data-act="punch-out" ${S.busy?"disabled":""}>Time out<span>End this shift</span></button>`
         : `<button class="punchbtn in" data-act="punch-in" ${(S.busy||!S.mineLoaded)?"disabled":""}>Time in<span>${S.mineLoaded?"Start your shift":"Checking your status…"}</span></button>`}
       ${S.settings.geoOn&&deviceOk()?`<div class="countdown">Location check is on. Your location is checked each time you punch.</div>`:""}
@@ -796,12 +810,13 @@ function viewStaff(){
   const list=[...S.staff].sort((a,b)=>(a.active===false)-(b.active===false)||a.name.localeCompare(b.name));
   return `<section class="panel">
     <h2>Add staff</h2>
+    <p class="muted" style="margin:0;font-size:.85rem"><b>Staff</b> can only time in and out. <b>Admins</b> manage records, leave, payslips, staff and roles, but not Settings. <b>Global admins</b> also manage Settings, approved devices and the location check, and are the only ones who can change someone's access.</p>
     <div class="row">
       <div class="field"><label for="ns-name">Full name</label><input id="ns-name" data-k="ns-name" value="${esc(D("ns-name"))}"></div>
       <div class="field"><label for="ns-user">Username</label><input id="ns-user" data-k="ns-user" value="${esc(D("ns-user"))}" autocapitalize="off" autocomplete="off"></div>
       <div class="field sm"><label for="ns-pin">PIN (4–6 digits)</label><input id="ns-pin" data-k="ns-pin" value="${esc(D("ns-pin"))}" inputmode="numeric" autocomplete="off"></div>
       <div class="field"><label for="ns-role">Role</label><select id="ns-role" data-k="ns-role">${roleOptions(D("ns-role"))}</select></div>
-      <label class="check"><input type="checkbox" id="ns-admin" data-k="ns-admin" ${D("ns-admin")?"checked":""}> Admin</label>
+      ${isGlobal(me())?accessSelect("ns-access", D("ns-access","staff")):""}
       <button class="btn primary" data-act="add-staff">Add staff</button>
     </div>
     ${S.err.staff?`<div class="err">${esc(S.err.staff)}</div>`:""}
@@ -813,8 +828,8 @@ function viewStaff(){
         <div class="field"><label for="es-name">Full name</label><input id="es-name" data-k="es-name" value="${esc(D("es-name",s.name))}"></div>
         <div class="field"><label for="es-role">Role</label><select id="es-role" data-k="es-role">${roleOptions(D("es-role",s.roleId||""))}</select></div>
         <div class="field sm"><label for="es-pin">New PIN</label><input id="es-pin" data-k="es-pin" value="${esc(D("es-pin"))}" inputmode="numeric" placeholder="Keep current" autocomplete="off"></div>
-        <label class="check"><input type="checkbox" id="es-admin" data-k="es-admin" ${D("es-admin",!!s.isAdmin)?"checked":""}> Admin</label>
-        <label class="check"><input type="checkbox" id="es-active" data-k="es-active" ${D("es-active",s.active!==false)?"checked":""}> Active</label>
+        ${isGlobal(me())?accessSelect("es-access", D("es-access",accessOf(s))):""}
+        ${isGlobal(me())||!s.isAdmin?`<label class="check"><input type="checkbox" id="es-active" data-k="es-active" ${D("es-active",s.active!==false)?"checked":""}> Active</label>`:""}
       </div>
       <div class="row" style="margin-top:10px">
         <label class="check"><input type="checkbox" id="es-own" data-k="es-own" ${D("es-own",hasShift(s.shift))?"checked":""}> Own shift instead of the role's</label>
@@ -826,9 +841,9 @@ function viewStaff(){
       const ssh=shiftOf(s);
       return `<tr><td><b>${esc(s.name)}</b>${s.id===S.meId?' <span class="muted">(you)</span>':""}</td><td class="mono">${esc(s.username)}</td><td>${esc(roleOf(s)?.name||"—")}</td>
       <td class="num">${esc(fmtShift(ssh))}${hasShift(s.shift)?' <span class="chip">Own</span>':""}</td>
-      <td>${s.isAdmin?'<span class="chip in">Admin</span>':'<span class="chip">Staff</span>'}</td>
+      <td>${accessChip(s)}</td>
       <td>${s.active===false?'<span class="chip">Inactive</span>':'<span class="chip in">Active</span>'}</td>
-      <td class="r"><button class="btn ghost sm" data-act="edit-staff" data-id="${esc(s.id)}">Edit</button></td></tr>`;}).join("")}
+      <td class="r">${isGlobal(me())||!s.isAdmin||s.id===S.meId?`<button class="btn ghost sm" data-act="edit-staff" data-id="${esc(s.id)}">Edit</button>`:'<span class="muted" style="font-size:.78rem">Global admin only</span>'}</td></tr>`;}).join("")}
     </tbody></table></div>
   </section>`;
 }
@@ -935,7 +950,7 @@ function render(){
   else if(!S.staff.length) html=brandBar()+viewSetup();
   else if(!me()) html=brandBar()+viewLogin();
   else {
-    const m=me(); let tab=S.tab; if(!m.isAdmin) tab="clock";
+    const m=me(); let tab=S.tab; if(!m.isAdmin) tab="clock"; if(tab==="settings" && !isGlobal(m)) tab="clock";
     const views={clock:viewClock,today:viewToday,records:viewRecords,leave:viewLeave,payslips:viewPayslips,staff:viewStaff,roles:viewRoles,settings:viewSettings};
     html=brandBar()+tabsBar()+(views[tab]||viewClock)();
   }
@@ -981,7 +996,7 @@ document.addEventListener("submit", async e=>{
     await run(async()=>{
       await S.db.doc("config/settings").set({company, currency:"PHP", kiosk:true});
       const ref=S.db.collection("staff").doc();
-      await ref.set({name, username:u, pinHash:await hashPin(u,pin), roleId:"", isAdmin:true, active:true, created:Date.now()});
+      await ref.set({name, username:u, pinHash:await hashPin(u,pin), roleId:"", isAdmin:true, isGlobal:true, active:true, created:Date.now()});
       S.meId=ref.id; ls.set("pc.session",ref.id); S.drafts={}; S.err={}; S.tab="roles";
     },"setup");
   }
@@ -1094,17 +1109,21 @@ document.addEventListener("click", async e=>{
       if(!/^[a-z0-9._-]+$/.test(u)){ S.err.staff="Usernames can use letters, numbers, dots, dashes and underscores."; render(); return; }
       if(S.staff.some(s=>s.username===u)){ S.err.staff=`The username "${u}" is taken.`; render(); return; }
       if(!validPin(pin)){ S.err.staff="PIN must be 4 to 6 digits."; render(); return; }
-      await run(async()=>{ await S.db.collection("staff").add({name, username:u, pinHash:await hashPin(u,pin), roleId:D("ns-role"), isAdmin:!!D("ns-admin",false), active:true, created:Date.now()}); clearDrafts("ns-"); S.err.staff=null; toast(`${name} added`); },"staff");
+      await run(async()=>{ await S.db.collection("staff").add({name, username:u, pinHash:await hashPin(u,pin), roleId:D("ns-role"), ...(()=>{ const a=isGlobal(me())?D("ns-access","staff"):"staff"; return {isAdmin:a!=="staff", isGlobal:a==="global"}; })(), active:true, created:Date.now()}); clearDrafts("ns-"); S.err.staff=null; toast(`${name} added`); },"staff");
       break; }
     case "edit-staff": S.editStaff=id; clearDrafts("es-"); S.err.es=null; render(); break;
     case "cancel-staff": S.editStaff=null; clearDrafts("es-"); render(); break;
     case "save-staff": {
       const s=S.staff.find(x=>x.id===id); if(!s) return;
-      const isAdmin=!!D("es-admin",!!s.isAdmin), active=!!D("es-active",s.active!==false), pin=D("es-pin");
-      const otherAdmins=S.staff.filter(x=>x.id!==id && x.isAdmin && x.active!==false).length;
-      if(s.isAdmin && (!isAdmin||!active) && !otherAdmins){ S.err.es="Keep at least one active admin."; render(); return; }
+      const meG=isGlobal(me());
+      if(!meG && s.isAdmin && s.id!==S.meId){ S.err.es="Only a global admin can change another admin."; render(); return; }
+      const access = meG ? D("es-access",accessOf(s)) : accessOf(s);
+      const isAdmin = access!=="staff", isGl = access==="global";
+      const active = (meG||!s.isAdmin) ? !!D("es-active",s.active!==false) : s.active!==false, pin=D("es-pin");
+      const otherGlobals=S.staff.filter(x=>x.id!==id && isGlobal(x) && x.active!==false).length;
+      if(isGlobal(s) && (!isGl||!active) && !otherGlobals){ S.err.es="Keep at least one active global admin. Make someone else a global admin first."; render(); return; }
       if(pin && !validPin(pin)){ S.err.es="PIN must be 4 to 6 digits."; render(); return; }
-      const upd={name:String(D("es-name",s.name)).trim()||s.name, roleId:D("es-role",s.roleId||""), isAdmin, active};
+      const upd={name:String(D("es-name",s.name)).trim()||s.name, roleId:D("es-role",s.roleId||""), isAdmin, isGlobal:isGl, active};
       if(D("es-own",hasShift(s.shift))){
         const rs=readShift("es-", hasShift(s.shift)?s.shift:shiftOf({roleId:upd.roleId}));
         if(rs.error){ S.err.es=rs.error; render(); return; }
