@@ -189,7 +189,7 @@ const S = {
   loaded:{staff:false, roles:false, settings:false, devices:false},
   staff:[], roles:[], devices:[], settings:{company:"", currency:"PHP", kiosk:true, deviceLock:false},
   meId: ls.get("pc.session"), tab: ls.get("pc.tab") || "clock",
-  mine:[], mineLoaded:false, open:[], today:[], leaves:[], leaveFilter:"all",
+  mine:[], mineLoaded:false, open:[], today:[], leaves:[], codes:[], leaveFilter:"all",
   drafts:{}, err:{}, confirm:null, editPunch:null, editRole:null, editStaff:null,
   rec:{staffId:"all", from:"", to:"", rows:null, unsub:null},
   slip:{staffId:"", from:"", to:"", punches:null, adj:[], loading:false},
@@ -371,8 +371,8 @@ function startSubs(){
   const m = me();
   const key = m ? m.id + (m.isAdmin?":a":"") : "";
   if(subs._key === key) return;
-  ["mine","open","today","leaves"].forEach(stopSub); subs._key = key;
-  S.mine=[]; S.mineLoaded=false; S.open=[]; S.today=[]; S.leaves=[];
+  ["mine","open","today","leaves","codes"].forEach(stopSub); subs._key = key;
+  S.mine=[]; S.mineLoaded=false; S.open=[]; S.today=[]; S.leaves=[]; S.codes=[];
   if(!m) return;
   subs.mine = S.db.collection("punches").where("staffId","==",m.id)
     .onSnapshot(s => { S.mine = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>b.in-a.in).slice(0,60); S.mineLoaded=true; render(); }, dbError);
@@ -381,6 +381,8 @@ function startSubs(){
       .onSnapshot(s => { S.open = s.docs.map(d=>({id:d.id, ...d.data()})); render(); }, ()=>{});
     subs.today = S.db.collection("punches").where("in",">=",startOfDay()).orderBy("in","desc")
       .onSnapshot(s => { S.today = s.docs.map(d=>({id:d.id, ...d.data()})); render(); }, ()=>{});
+    subs.codes = S.db.collection("devcodes")
+      .onSnapshot(s => { S.codes = s.docs.map(d=>({id:d.id, ...d.data()})); render(); }, ()=>{});
     subs.leaves = S.db.collection("leaves").orderBy("from","desc").limit(1000)
       .onSnapshot(s => { S.leaves = s.docs.map(d=>({id:d.id, ...d.data()})); render(); }, ()=>{});
   }
@@ -389,6 +391,37 @@ function logout(){
   S.meId=null; ls.set("pc.session", null); S.logoutAt=null; S.drafts={}; S.err={};
   stopSub("recs"); S.rec.rows=null; S.slip.punches=null; subs._key=undefined; startSubs(); render();
 }
+
+
+/* ---------- location check ---------- */
+const fmtDist = m => m>=1000 ? (m/1000).toFixed(1)+" km" : Math.round(m)+" m";
+function distM(a,b,c,d){ const R=6371000, r=x=>x*Math.PI/180, dl=r(c-a), dn=r(d-b);
+  const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+function getPos(){
+  return new Promise((res,rej)=>{
+    if(!navigator.geolocation) return rej({code:"unsupported"});
+    if(!window.isSecureContext) return rej({code:"insecure"});
+    navigator.geolocation.getCurrentPosition(p=>res(p.coords), e=>rej({code:e.code===1?"denied":e.code===3?"timeout":"unavailable"}), {enableHighAccuracy:true, timeout:20000, maximumAge:0});
+  });
+}
+const geoMsg = code => ({
+  denied:"Location is blocked for this page. Allow location access in the browser's site settings, then try again.",
+  timeout:"Couldn't get the location in time. Turn on location services and Wi-Fi, then try again.",
+  unsupported:"This browser can't share its location.",
+  insecure:"The location check only works when the page is opened from an https:// web address, not from a file on the computer.",
+  unavailable:"The location isn't available right now. Turn on location services and try again."
+}[code] || "Couldn't get the location.");
+/* returns null when the check is off, the punch location when allowed, or throws {userMsg} */
+async function checkGeo(){
+  const st=S.settings; if(!st.geoOn) return null;
+  let c; try{ c=await getPos(); }catch(e){ throw {userMsg:geoMsg(e.code)}; }
+  const rad=+st.geoRadius||100, acc=Math.round(c.accuracy||0);
+  const d=Math.round(distM(c.latitude,c.longitude,+st.geoLat,+st.geoLng));
+  if(acc>Math.max(500, rad*3)) throw {userMsg:`The location is too rough to check (about ±${fmtDist(acc)}). Turn on GPS or Wi-Fi, then try again.`};
+  if(d>rad) throw {userMsg:`You're about ${fmtDist(d)} from ${st.company||"the shop"}. Time in and time out only work within ${fmtDist(rad)}.`};
+  return {lat:+c.latitude.toFixed(6), lng:+c.longitude.toFixed(6), acc, dist:d};
+}
+const locTag = l => l ? ` <span class="${l.dist>(+S.settings.geoRadius||100)?"ot-mark":"muted"}" style="font-size:.78rem" title="±${l.acc} m">${fmtDist(l.dist)} away</span>` : "";
 
 /* ---------- views ---------- */
 function clockFace(){
@@ -438,10 +471,21 @@ function viewLogin(){
       <h3>Sign in to punch</h3>
       <div class="field"><label for="li-user">Username</label><input id="li-user" data-k="li-user" value="${esc(D("li-user"))}" autocapitalize="off" autocomplete="username" required></div>
       <div class="field"><label for="li-pin">PIN</label><input id="li-pin" data-k="li-pin" value="${esc(D("li-pin"))}" type="password" inputmode="numeric" autocomplete="current-password" required></div>
-      ${!deviceOk()&&!S.err.login?`<div class="note">This device isn't approved for time in/out. Only admins can sign in here.</div>`:""}
+      ${!deviceOk()&&!S.err.login?`<div class="note">This device isn't approved for time in/out yet. Admins can still sign in here to manage the system.</div>`:""}
       ${S.err.login?`<div class="err">${esc(S.err.login)}</div>`:""}
       <button class="btn primary" type="submit">Sign in</button>
     </form>
+    ${!thisDevice()&&DEVICE_ID&&!S.settings.deviceLock&&!S.showPair?`<p style="text-align:center;margin:0"><button class="btn ghost sm" data-act="show-pair">Set up this device with a code</button></p>`:""}
+    ${!thisDevice()&&DEVICE_ID&&(S.settings.deviceLock||S.showPair)?`<div class="panel" style="gap:12px">
+      <h3>Set up this device for time in/out</h3>
+      <p class="muted" style="margin:0;font-size:.85rem">Ask an admin for a device code. They create one in Settings → Approved devices.</p>
+      <div class="row">
+        <div class="field sm"><label for="pc-code">Device code</label><input id="pc-code" data-k="pc-code" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(D("pc-code"))}"></div>
+        <div class="field"><label for="pc-name">Name this device</label><input id="pc-name" data-k="pc-name" value="${esc(D("pc-name",guessDeviceName()))}"></div>
+      </div>
+      ${S.err.pair?`<div class="err">${esc(S.err.pair)}</div>`:""}
+      <div><button class="btn" data-act="pair-device">Approve this device</button></div>
+    </div>`:""}
     <p class="muted" style="text-align:center;font-size:.82rem">Forgot your PIN? Ask an admin to reset it.</p>
   </div>`;
 }
@@ -472,6 +516,7 @@ function viewClock(){
       ${!deviceOk() ? `<div class="note"><b>Not an approved device.</b> Time in and time out are turned off here. ${m.isAdmin?"You can approve this device in Settings.":"Use one of the approved time clock devices."}</div>` : open
         ? `<button class="punchbtn out" data-act="punch-out" ${S.busy?"disabled":""}>Time out<span>End this shift</span></button>`
         : `<button class="punchbtn in" data-act="punch-in" ${(S.busy||!S.mineLoaded)?"disabled":""}>Time in<span>${S.mineLoaded?"Start your shift":"Checking your status…"}</span></button>`}
+      ${S.settings.geoOn&&deviceOk()?`<div class="countdown">Location check is on. Your location is checked each time you punch.</div>`:""}
       <div class="stats">
         <div class="stat"><span class="eyebrow">Today</span><b data-today="${open?open.in:""}" data-base="${Math.round(todayMins - (open?(Date.now()-open.in)/60000:0))}">${hm(todayMins)}</b></div>
         <div class="stat"><span class="eyebrow">Outside shift</span><b class="${outside>=otMin?"ot-mark":""}" title="${outside>=otMin?"Counts as overtime":"Overtime starts at "+otMin+" minutes outside your shift"}">${hm(outside)}</b></div>
@@ -535,8 +580,8 @@ function punchRow(p, showStaff){
   const mins = p.out ? (p.out-p.in)/60000 : null;
   const confirming = S.confirm==="del-punch:"+p.id;
   return `<tr>${showStaff?`<td>${esc(staffName(p.staffId))}</td>`:""}
-    <td>${esc(fmtDate(p.in))}</td><td class="num">${esc(fmtTime(p.in))}</td>
-    <td class="num">${p.out?esc(fmtTime(p.out))+(dayKey(p.out)!==dayKey(p.in)?' <span class="muted">+1d</span>':""):'<span class="chip in"><span class="dot"></span>Open</span>'}</td>
+    <td>${esc(fmtDate(p.in))}</td><td class="num">${esc(fmtTime(p.in))}${locTag(p.inLoc)}</td>
+    <td class="num">${p.out?esc(fmtTime(p.out))+(dayKey(p.out)!==dayKey(p.in)?' <span class="muted">+1d</span>':"")+locTag(p.outLoc):'<span class="chip in"><span class="dot"></span>Open</span>'}</td>
     <td class="num r">${mins!=null?hm(mins):"—"}</td>
     <td class="r">${confirming
       ? `<span class="inline-confirm">Delete this punch? <button class="btn danger sm" data-act="del-punch" data-id="${esc(p.id)}">Delete</button><button class="btn ghost sm" data-act="cancel-confirm">Keep</button></span>`
@@ -800,7 +845,31 @@ function viewSettings(){
     <div><button class="btn primary" data-act="save-settings">Save settings</button></div>
     <p class="note">Staff PINs are stored as hashes in this page's shared storage. Anyone you share the page with as Contributor or above can read and change that storage, so share it only with people you trust, or run it on one shared device signed in to your account.</p>
   </section>
-  ${viewDevices()}`;
+  ${viewDevices()}
+  ${viewLocation()}`;
+}
+
+function viewLocation(){
+  const st=S.settings, has=st.geoLat!=null && st.geoLat!=="";
+  const lat=D("geo-lat", has?String(st.geoLat):""), lng=D("geo-lng", has?String(st.geoLng):""), rad=D("geo-rad", String(st.geoRadius||100));
+  const on=D("geo-on", !!st.geoOn);
+  return `<section class="panel" style="max-width:760px">
+    <div class="hrow"><h2>Location check</h2><span class="chip ${st.geoOn?"in":""}">${st.geoOn?"On":"Off"}</span></div>
+    <p class="muted" style="margin:0;font-size:.88rem">When this is on, time in and time out only work when the device is within the allowed distance of the shop. Every punch saves how far away it was, shown on the Records tab. Phone locations can be faked with special apps, so use this together with approved devices.</p>
+    <div class="row">
+      <div class="field"><label for="geo-lat">Shop latitude</label><input id="geo-lat" data-k="geo-lat" inputmode="decimal" value="${esc(lat)}"></div>
+      <div class="field"><label for="geo-lng">Shop longitude</label><input id="geo-lng" data-k="geo-lng" inputmode="decimal" value="${esc(lng)}"></div>
+      <div class="field sm"><label for="geo-rad">Allowed distance (metres)</label><input id="geo-rad" type="number" min="20" max="5000" step="10" data-k="geo-rad" value="${esc(rad)}"></div>
+    </div>
+    <div class="row" style="align-items:center">
+      <button class="btn" data-act="geo-here" ${S.geoBusy?"disabled":""}>${S.geoBusy?"Finding location…":"Use this device's location"}</button>
+      ${lat&&lng?`<a class="btn ghost sm" href="https://www.google.com/maps?q=${encodeURIComponent(lat+","+lng)}" target="_blank" rel="noopener">Check on Google Maps</a>`:""}
+    </div>
+    <span class="muted" style="font-size:.82rem">Stand inside the shop and press "Use this device's location". Or, in Google Maps, right-click the shop and click the coordinates at the top of the menu to copy them. 100 metres suits most shops; raise it if staff get blocked while inside.</span>
+    <label class="check"><input type="checkbox" id="geo-on" data-k="geo-on" ${on?"checked":""}> Only allow time in/out near the shop</label>
+    ${S.err.geo?`<div class="err">${esc(S.err.geo)}</div>`:""}
+    <div><button class="btn primary" data-act="save-geo">Save location check</button></div>
+  </section>`;
 }
 
 function viewDevices(){
@@ -814,6 +883,12 @@ function viewDevices(){
         : cur?`<span class="muted" style="font-size:.88rem">Approved as <b>${esc(cur.name)}</b>.</span>`
         : `<div class="row"><div class="field"><label for="dv-name">Device name</label><input id="dv-name" data-k="dv-name" value="${esc(D("dv-name",guessDeviceName()))}" placeholder="e.g. Front desk tablet"></div>
            <button class="btn primary" data-act="approve-device">Approve this device</button></div>`}
+    </div>
+    <div class="panel" style="padding:14px;gap:10px;background:var(--sunk)">
+      <div class="hrow"><h3>Add another device</h3><button class="btn sm" data-act="make-code">Create device code</button></div>
+      <span class="muted" style="font-size:.85rem">Approve as many devices as you need. Create a code, open the time clock on the new device, and type the code under "Set up this device" on the sign-in screen. Each code works once and expires after 15 minutes.</span>
+      ${(()=>{ const live=S.codes.filter(c=>c.expires>Date.now()).sort((a,b)=>b.created-a.created);
+        return live.length?`<div class="row">${live.map(c=>`<span class="chip in" style="font-size:1rem;padding:6px 12px"><span class="mono" style="letter-spacing:.15em">${esc(c.id)}</span></span><span class="muted" style="font-size:.82rem">expires ${esc(fmtTime(c.expires))}</span><button class="btn ghost sm" data-act="del-code" data-id="${esc(c.id)}">Cancel</button>`).join("")}</div>`:""; })()}
     </div>
     ${S.devices.length?`<div class="tbl"><table><thead><tr><th>Device</th><th>Approved</th><th>By</th><th></th></tr></thead><tbody>
       ${S.devices.map(d=>{ const conf=S.confirm==="del-device:"+d.id;
@@ -856,7 +931,7 @@ setInterval(()=>{
 async function run(fn, errKey){
   try { S.busy=true; await fn(); }
   catch(e){
-    const msg = e?.code==="permission-denied" ? "Firebase blocked this change. Check that the Firestore rules allow the pc_ collections."
+    const msg = e?.userMsg ? e.userMsg : e?.code==="permission-denied" ? "Firebase blocked this change. Check that the Firestore rules allow the pc_ collections."
       : e?.code==="resource-exhausted" ? "The Firebase daily limit was reached. Try again later or upgrade the Firebase plan."
       : e?.code==="unavailable" ? "No connection to the database. Check the internet and try again."
       : "That didn't save. Check your connection and try again.";
@@ -911,11 +986,11 @@ document.addEventListener("click", async e=>{
 
     case "punch-in":
       if(S.mine.some(p=>p.open) || !deviceOk()) return;
-      await run(async()=>{ await S.db.collection("punches").add({staffId:m.id, in:Date.now(), out:null, open:true}); toast(`Timed in at ${fmtTime(Date.now())}`); afterPunch(); });
+      await run(async()=>{ if(S.settings.geoOn) toast("Checking your location…"); const loc=await checkGeo(); await S.db.collection("punches").add({staffId:m.id, in:Date.now(), out:null, open:true, inLoc:loc}); toast(`Timed in at ${fmtTime(Date.now())}`); afterPunch(); });
       break;
     case "punch-out": {
       const open=S.mine.find(p=>p.open); if(!open || !deviceOk()) return;
-      await run(async()=>{ const now=Date.now(); await S.db.doc("punches/"+open.id).update({out:now, open:false}); toast(`Timed out at ${fmtTime(now)} · ${hm((now-open.in)/60000)} worked`); afterPunch(); });
+      await run(async()=>{ if(S.settings.geoOn) toast("Checking your location…"); const loc=await checkGeo(); const now=Date.now(); await S.db.doc("punches/"+open.id).update({out:now, open:false, outLoc:loc}); toast(`Timed out at ${fmtTime(now)} · ${hm((now-open.in)/60000)} worked`); afterPunch(); });
       break; }
 
     /* records */
@@ -932,7 +1007,7 @@ document.addEventListener("click", async e=>{
       const inMs=new Date(D("ep-in",toLocalInput(p.in))).getTime(), outV=D("ep-out",toLocalInput(p.out)), outMs=outV?new Date(outV).getTime():null;
       if(!inMs){ S.err.punch="Enter a valid time in."; render(); return; }
       if(outMs && outMs<=inMs){ S.err.punch="Time out must be after time in."; render(); return; }
-      await run(async()=>{ await S.db.doc("punches/"+id).set({staffId:p.staffId, in:inMs, out:outMs, open:!outMs, edited:Date.now()}); S.editPunch=null; clearDrafts("ep-"); toast("Punch updated"); },"punch");
+      await run(async()=>{ await S.db.doc("punches/"+id).set({staffId:p.staffId, in:inMs, out:outMs, open:!outMs, edited:Date.now(), inLoc:p.inLoc||null, outLoc:p.outLoc||null}); S.editPunch=null; clearDrafts("ep-"); toast("Punch updated"); },"punch");
       break; }
     case "del-punch": await run(async()=>{ await S.db.doc("punches/"+id).delete(); S.confirm=null; toast("Punch deleted"); }); break;
     case "add-punch": {
@@ -1026,10 +1101,51 @@ document.addEventListener("click", async e=>{
       break;
 
     /* approved devices */
+    case "geo-here": {
+      S.geoBusy=true; S.err.geo=null; render();
+      try{ const c=await getPos(); S.drafts["geo-lat"]=c.latitude.toFixed(6); S.drafts["geo-lng"]=c.longitude.toFixed(6);
+        toast(`Location found, accurate to about ${fmtDist(c.accuracy)}. Press Save to keep it.`); }
+      catch(e){ S.err.geo=geoMsg(e.code); }
+      S.geoBusy=false; render(); break; }
+    case "save-geo": {
+      const on=!!D("geo-on",!!S.settings.geoOn);
+      const lat=parseFloat(D("geo-lat",S.settings.geoLat??"")), lng=parseFloat(D("geo-lng",S.settings.geoLng??""));
+      const rad=Math.round(+D("geo-rad",S.settings.geoRadius||100));
+      const hasLL=isFinite(lat)&&isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180&&!(lat===0&&lng===0);
+      if(on && !hasLL){ S.err.geo="Set the shop's location before turning the check on."; render(); return; }
+      if(!(rad>=20 && rad<=5000)){ S.err.geo="Allowed distance must be between 20 and 5,000 metres."; render(); return; }
+      await run(async()=>{ await S.db.doc("config/settings").set({...S.settings, geoOn:on, geoLat:hasLL?lat:null, geoLng:hasLL?lng:null, geoRadius:rad});
+        for(const k of ["geo-on","geo-lat","geo-lng","geo-rad"]) delete S.drafts[k]; S.err.geo=null; toast(on?"Location check is on":"Location settings saved"); },"geo");
+      break; }
     case "approve-device": {
       if(!DEVICE_ID) return;
       const name=String(D("dv-name",guessDeviceName())).trim()||guessDeviceName();
       await run(async()=>{ await S.db.doc("devices/"+DEVICE_ID).set({name, created:Date.now(), by:S.meId}); clearDrafts("dv-"); toast(`${name} approved`); });
+      break; }
+    case "show-pair": S.showPair=true; render(); break;
+    case "make-code": {
+      const code=String(Math.floor(100000+Math.random()*900000));
+      await run(async()=>{
+        for(const c of S.codes) if(c.expires<=Date.now()) await S.db.doc("devcodes/"+c.id).delete();
+        await S.db.doc("devcodes/"+code).set({created:Date.now(), expires:Date.now()+15*60000, by:S.meId});
+        toast(`Device code ${code} is ready for 15 minutes`);
+      });
+      break; }
+    case "del-code":
+      await run(async()=>{ await S.db.doc("devcodes/"+id).delete(); toast("Code cancelled"); });
+      break;
+    case "pair-device": {
+      if(!DEVICE_ID) return;
+      const code=String(D("pc-code")).trim(), name=String(D("pc-name",guessDeviceName())).trim()||guessDeviceName();
+      if(!/^\d{6}$/.test(code)){ S.err.pair="Enter the 6-digit code from an admin."; render(); return; }
+      await run(async()=>{
+        const snap=await S.db.doc("devcodes/"+code).get();
+        const c=snap.exists?snap.data():null;
+        if(!c || !(c.expires>Date.now())){ S.err.pair="That code is wrong or has expired. Ask an admin for a new one."; return; }
+        await S.db.doc("devices/"+DEVICE_ID).set({name, created:Date.now(), by:c.by||"", via:"code"});
+        await S.db.doc("devcodes/"+code).delete();
+        clearDrafts("pc-"); S.err.pair=null; toast(`${name} is approved for time in/out`);
+      },"pair");
       break; }
     case "del-device":
       await run(async()=>{ await S.db.doc("devices/"+id).delete(); S.confirm=null; toast("Device removed"); });
